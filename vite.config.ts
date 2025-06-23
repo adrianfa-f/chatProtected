@@ -1,15 +1,12 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig(({ mode }) => {
-  // Cargar variables de entorno VITE_*
   const env = loadEnv(mode, process.cwd());
-
-  // Obtener URLs de las variables de entorno
   const apiUrl = env.VITE_API_URL || 'http://localhost:4000';
   const wsUrl = env.VITE_WS_SERVER || 'ws://localhost:4000';
 
-  // Construir política CSP dinámica
   const csp = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -19,21 +16,20 @@ export default defineConfig(({ mode }) => {
   ].join('; ');
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Polyfills para módulos de Node
+      nodePolyfills({
+        include: ['crypto', 'stream'],
+        globals: { Buffer: true }
+      })
+    ],
     server: {
       headers: {
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
         "Content-Security-Policy": csp
-      }
-    },
-    resolve: {
-      alias: {
-        crypto: 'crypto-browserify',
-        stream: 'stream-browserify',
-        util: 'util/',
-        buffer: 'buffer/'
       }
     },
     build: {
