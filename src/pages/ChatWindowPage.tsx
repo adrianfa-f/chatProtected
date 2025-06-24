@@ -2,10 +2,13 @@ import { useParams } from 'react-router-dom';
 import { useChat } from '../contexts/ChatContext';
 import { useEffect } from 'react';
 import ChatWindow from '../components/chat/ChatWindow';
+import { useSocket } from '../contexts/SocketContext';
+import { joinChat, leaveChat } from '../services/socketService';
 
 const ChatWindowPage = () => {
     const { chatId } = useParams<{ chatId: string }>();
     const { activeChat, setActiveChat, chats, loadChatMessages } = useChat();
+    const socket = useSocket();
 
     useEffect(() => {
         if (chatId) {
@@ -17,6 +20,19 @@ const ChatWindowPage = () => {
             }
         }
     }, [chatId, chats, loadChatMessages, setActiveChat]);
+
+    // Unirse y salir del chat usando WebSockets
+    useEffect(() => {
+        if (!chatId || !socket) return;
+
+        // Unirse al chat específico
+        joinChat(socket, chatId);
+
+        return () => {
+            // Salir del chat al desmontar el componente
+            leaveChat(socket, chatId);
+        };
+    }, [chatId, socket]);
 
     return (
         <div className="flex h-[100dvh] bg-gray-50">
