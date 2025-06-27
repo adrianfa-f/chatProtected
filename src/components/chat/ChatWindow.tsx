@@ -6,12 +6,15 @@ import { FaArrowLeft } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { FaCircle } from 'react-icons/fa';
+import { useSocket } from '../../contexts/SocketContext'; // Importar contexto de socket
+import { joinChat, leaveChat } from '../../services/socketService'; // Importar utilidades de socket
 
 const ChatWindow = () => {
     const { activeChat, messages } = useChat();
     const { user } = useAuth();
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const socket = useSocket(); // Obtener instancia del socket
 
     // Función para formatear la última conexión
     const formatLastSeen = (lastSeen?: string | Date): string => {
@@ -32,6 +35,21 @@ const ChatWindow = () => {
             return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
         }
     };
+
+    // Unirse al chat cuando se monta el componente o cambia el chat activo
+    useEffect(() => {
+        if (!activeChat?.id || !socket) return;
+
+        // Unirse al chat
+        joinChat(socket, activeChat.id);
+        console.log(`Unido al chat: ${activeChat.id}`);
+
+        return () => {
+            // Salir del chat cuando el componente se desmonta o cambia el chat
+            leaveChat(socket, activeChat.id);
+            console.log(`Salió del chat: ${activeChat.id}`);
+        };
+    }, [activeChat?.id, socket]);
 
     // Scroll automático al final de los mensajes
     useEffect(() => {

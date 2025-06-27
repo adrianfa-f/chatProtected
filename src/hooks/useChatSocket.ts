@@ -16,16 +16,14 @@ export const useChatSocket = () => {
     useEffect(() => {
         if (!socket || !user) return;
 
-        // Manejar nuevos mensajes recibidos
         const handleNewMessage = (message: Message) => {
-            // Solo procesar si el mensaje es para este usuario
+            // Corregir verificación de destinatario
             if (message.receiverId === user.id || message.senderId === user.id) {
                 addMessage(message);
                 updateChatLastMessage(message.chatId, new Date(message.createdAt));
             }
         };
 
-        // Manejar cambios de estado de usuarios
         const handleUserStatus = (data: {
             userId: string;
             online: boolean;
@@ -34,7 +32,6 @@ export const useChatSocket = () => {
             setUserOnlineStatus(data.userId, data.online, data.lastSeen);
         };
 
-        // Escuchar eventos del socket
         socket.on('receive-message', handleNewMessage);
         socket.on('user-status', handleUserStatus);
 
