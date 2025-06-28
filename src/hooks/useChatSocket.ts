@@ -42,6 +42,11 @@ export const useChatSocket = () => {
             loadChatMessages(data.chatId);
         };
 
+        console.log("Socket connection status:", socket?.connected);
+        socket?.on("connect", () => console.log("Socket connected"));
+        socket?.on("disconnect", () => console.log("Socket disconnected"));
+        socket?.on("error", (err) => console.error("Socket error:", err));
+
         socket.on('receive-message', handleNewMessage);
         socket.on('user-status', handleUserStatus);
         socket.on('new-message-notification', handleNotification);
