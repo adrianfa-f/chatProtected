@@ -36,6 +36,23 @@ const ChatWindow = () => {
         }
     };
 
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleReconnect = () => {
+            if (activeChat?.id) {
+                joinChat(socket, activeChat.id);
+                console.log(`Re-joined chat after reconnect: ${activeChat.id}`);
+            }
+        };
+
+        socket.on('reconnect', handleReconnect);
+
+        return () => {
+            socket.off('reconnect', handleReconnect);
+        };
+    }, [socket, activeChat?.id]);
+
     // Unirse al chat cuando se monta el componente o cambia el chat activo
     useEffect(() => {
         if (!activeChat?.id || !socket) return;

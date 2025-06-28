@@ -15,3 +15,15 @@ export const sendMessageSocket = (
 ) => {
     socket?.emit('send-message', message);
 };
+
+// Nueva función para solicitar mensajes perdidos
+export const requestMissedMessages = (
+    socket: Socket | null,
+    chatId: string,
+    lastMessageId: string
+) => {
+    socket?.emit('request-messages', {
+        chatId,
+        lastMessageId
+    });
+};
