@@ -6,15 +6,16 @@ import { FaArrowLeft } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { FaCircle } from 'react-icons/fa';
-import { useSocket } from '../../contexts/SocketContext'; // Importar contexto de socket
-import { joinChat, leaveChat } from '../../services/socketService'; // Importar utilidades de socket
+import { useSocket } from '../../contexts/SocketContext';
+import { joinChat, leaveChat } from '../../services/socketService';
+import type { Message } from '../../types/types';
 
 const ChatWindow = () => {
     const { activeChat, messages } = useChat();
     const { user } = useAuth();
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const socket = useSocket(); // Obtener instancia del socket
+    const socket = useSocket();
 
     // Función para formatear la última conexión
     const formatLastSeen = (lastSeen?: string | Date): string => {
@@ -36,37 +37,104 @@ const ChatWindow = () => {
         }
     };
 
+    // Manejar reconexiones
     useEffect(() => {
-        if (!socket) return;
+        if (!socket) {
+            console.log('[CHAT WINDOW] Socket no disponible');
+            return;
+        }
+
+        console.log('[CHAT WINDOW] Configurando listener de reconexión');
 
         const handleReconnect = () => {
+            console.log('[CHAT WINDOW] Socket reconectado');
             if (activeChat?.id) {
                 joinChat(socket, activeChat.id);
-                console.log(`Re-joined chat after reconnect: ${activeChat.id}`);
+                console.log(`[CHAT WINDOW] Re-joined chat after reconnect: ${activeChat.id}`);
             }
         };
 
         socket.on('reconnect', handleReconnect);
 
         return () => {
+            console.log('[CHAT WINDOW] Limpiando listener de reconexión');
             socket.off('reconnect', handleReconnect);
         };
     }, [socket, activeChat?.id]);
 
-    // Unirse al chat cuando se monta el componente o cambia el chat activo
+    // Unirse/salir del chat
     useEffect(() => {
-        if (!activeChat?.id || !socket) return;
+        if (!activeChat?.id || !socket) {
+            console.log('[CHAT WINDOW] No hay chat activo o socket no disponible');
+            return;
+        }
 
-        // Unirse al chat
+        console.log(`[CHAT WINDOW] Uniendo al chat: ${activeChat.id}`);
         joinChat(socket, activeChat.id);
-        console.log(`Unido al chat: ${activeChat.id}`);
 
         return () => {
-            // Salir del chat cuando el componente se desmonta o cambia el chat
+            console.log(`[CHAT WINDOW] Saliendo del chat: ${activeChat.id}`);
             leaveChat(socket, activeChat.id);
-            console.log(`Salió del chat: ${activeChat.id}`);
         };
     }, [activeChat?.id, socket]);
+
+    // Configurar listeners de WebSocket
+    useEffect(() => {
+        if (!socket) {
+            console.log('[CHAT WINDOW] Socket no disponible para configurar listeners');
+            return;
+        }
+
+        console.log('[CHAT WINDOW] Configurando listeners de WebSocket');
+
+        const handleReceiveMessage = (message: Message) => {
+            console.log('[CHAT WINDOW] Mensaje recibido via socket:', message);
+        };
+
+        const handleMessageError = (error: Message) => {
+            console.error('[CHAT WINDOW] Error al enviar mensaje:', error);
+        };
+
+        const handleTestResponse = (data: Message) => {
+            console.log('[CHAT WINDOW] Respuesta de prueba del servidor:', data);
+        };
+
+        socket.on('receive-message', handleReceiveMessage);
+        socket.on('message-error', handleMessageError);
+        socket.on('test-response', handleTestResponse);
+
+        // Función para enviar evento de prueba
+        const sendTestEvent = () => {
+            if (activeChat?.id) {
+                console.log('[CHAT WINDOW] Enviando evento de prueba al servidor');
+                socket.emit('test-event', {
+                    chatId: activeChat.id,
+                    timestamp: Date.now(),
+                    message: 'Test from ChatWindow'
+                });
+            }
+        };
+
+        // Enviar prueba al montar
+        sendTestEvent();
+
+        // Enviar prueba periódicamente solo en desarrollo
+        if (process.env.NODE_ENV === 'development') {
+            const testInterval = setInterval(sendTestEvent, 30000);
+            return () => {
+                clearInterval(testInterval);
+                socket.off('receive-message', handleReceiveMessage);
+                socket.off('message-error', handleMessageError);
+                socket.off('test-response', handleTestResponse);
+            };
+        }
+
+        return () => {
+            socket.off('receive-message', handleReceiveMessage);
+            socket.off('message-error', handleMessageError);
+            socket.off('test-response', handleTestResponse);
+        };
+    }, [socket, activeChat?.id]);
 
     // Scroll automático al final de los mensajes
     useEffect(() => {
