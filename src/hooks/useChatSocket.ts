@@ -1,82 +1,52 @@
 import { useEffect } from 'react';
 import { useSocket } from '../contexts/SocketContext';
-import { useAuth } from '../contexts/AuthContext';
 import { useChat } from '../contexts/ChatContext';
 import type { Message } from '../types/types';
 
 export const useChatSocket = () => {
     const socket = useSocket();
-    const { user } = useAuth();
-    const {
-        addMessage,
-        updateChatLastMessage,
-        setUserOnlineStatus
-    } = useChat();
+    const { addMessage, setUserOnlineStatus } = useChat();
 
     useEffect(() => {
-        if (!socket) {
-            console.log('[useChatSocket] Socket no disponible');
-            return;
-        }
+        if (!socket) return;
 
-        if (!user) {
-            console.log('[useChatSocket] Usuario no autenticado');
-            return;
-        }
-
-        console.log('[useChatSocket] Configurando listeners de WebSocket');
-
-        const handleNewMessage = (message: Message) => {
-            console.log('[useChatSocket] Nuevo mensaje recibido via socket:', {
-                id: message.id,
-                chatId: message.chatId,
-                senderId: message.senderId,
-                receiverId: message.receiverId
-            });
-
-            if (message.receiverId === user.id || message.senderId === user.id) {
-                console.log('[useChatSocket] Mensaje es para el usuario actual. Añadiendo al contexto.');
-                addMessage(message);
-                updateChatLastMessage(message.chatId, new Date(message.createdAt));
-            } else {
-                console.log('[useChatSocket] Mensaje no es para el usuario actual. Ignorando.');
-            }
+        const handleReceiveMessage = (message: Message) => {
+            console.log('[useChatSocket] Mensaje recibido', message);
+            addMessage(message);
         };
 
         const handleUserStatus = (data: {
             userId: string;
             online: boolean;
-            lastSeen?: Date;
+            lastSeen?: Date
         }) => {
-            console.log(`[useChatSocket] Actualización de estado: ${data.userId} -> ${data.online ? 'online' : 'offline'}`);
+            console.log('[useChatSocket] Actualizando estado de usuario:', data);
             setUserOnlineStatus(data.userId, data.online, data.lastSeen);
         };
 
-        const handleConnect = () => {
-            console.log('[useChatSocket] Conectado al servidor WebSocket');
-        };
+        // Eventos para depuración
+        const handleConnect = () => console.log('[useChatSocket] Socket conectado');
+        const handleDisconnect = () => console.log('[useChatSocket] Socket desconectado');
+        const handleError = (error: string) => console.error('[useChatSocket] Error de socket:', error);
 
-        const handleDisconnect = (reason: string) => {
-            console.log(`[useChatSocket] Desconectado del servidor: ${reason}`);
-        };
-
-        const handleConnectError = (err: Error) => {
-            console.error('[useChatSocket] Error de conexión:', err);
-        };
-
-        socket.on('receive-message', handleNewMessage);
+        socket.on('receive-message', handleReceiveMessage);
         socket.on('user-status', handleUserStatus);
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
-        socket.on('connect_error', handleConnectError);
+        socket.on('error', handleError);
+
+        // Registrar todos los eventos para depuración
+        socket.onAny((event, ...args) => {
+            console.log(`[useChatSocket] Evento recibido: ${event}`, args);
+        });
 
         return () => {
-            console.log('[useChatSocket] Limpiando listeners de WebSocket');
-            socket.off('receive-message', handleNewMessage);
+            socket.off('receive-message', handleReceiveMessage);
             socket.off('user-status', handleUserStatus);
             socket.off('connect', handleConnect);
             socket.off('disconnect', handleDisconnect);
-            socket.off('connect_error', handleConnectError);
+            socket.off('error', handleError);
+            socket.offAny();
         };
-    }, [socket, user, addMessage, updateChatLastMessage, setUserOnlineStatus]);
+    }, [socket, addMessage, setUserOnlineStatus]);
 };

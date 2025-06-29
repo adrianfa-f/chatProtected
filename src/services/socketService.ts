@@ -34,8 +34,14 @@ export const sendMessageSocket = (
         ...message,
         ciphertext: message.ciphertext.substring(0, 20) + '...'
     });
-    socket.emit('send-message', message);
-    return true;
+
+    try {
+        socket.emit('send-message', message);
+        return true;
+    } catch (error) {
+        console.error('[SocketService] Error al enviar mensaje:', error);
+        return false;
+    }
 };
 
 export const testSocketConnection = (socket: Socket | null) => {

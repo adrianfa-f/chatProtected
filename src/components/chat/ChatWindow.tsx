@@ -101,9 +101,15 @@ const ChatWindow = () => {
         socket.on('receive-message', handleReceiveMessage);
         socket.on('message-error', handleMessageError);
 
+        // Debug: registrar todos los eventos entrantes
+        socket.onAny((event, ...args) => {
+            console.log(`[WS DEBUG] Evento recibido: ${event}`, args);
+        });
+
         return () => {
             socket.off('receive-message', handleReceiveMessage);
             socket.off('message-error', handleMessageError);
+            socket.offAny();
         };
     }, [socket, addMessage]); // Añadir addMessage como dependencia
 

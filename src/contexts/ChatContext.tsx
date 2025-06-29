@@ -293,31 +293,39 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const addMessage = useCallback(async (message: Message) => {
         if (!user || !privateKey) return;
 
+        console.log('[ChatContext] Agregando mensaje recibido:', message);
+
         let processedMessage = message;
 
-        // Descifrar mensajes entrantes
+        // Solo descifrar si el mensaje no es propio
         if (message.senderId !== user.id) {
             try {
                 const plaintext = await decryptMessage(message.ciphertext, privateKey);
                 processedMessage = { ...message, plaintext };
             } catch (error) {
-                console.error('Error descifrando mensaje entrante', error);
+                console.error('[ChatContext] Error descifrando mensaje entrante', error);
                 processedMessage = { ...message, plaintext: '❌ Error al descifrar' };
             }
         }
 
         setMessages(prev => {
             // Evitar duplicados
-            if (prev.some(m => m.id === processedMessage.id)) return prev;
-
-            const newMessages = [...prev, processedMessage];
-            if (activeChat?.id === processedMessage.chatId) {
-                saveMessagesToLocalStorage(processedMessage.chatId, newMessages);
+            if (prev.some(m => m.id === processedMessage.id)) {
+                console.warn('[ChatContext] Mensaje duplicado ignorado:', processedMessage.id);
+                return prev;
             }
-            return sortMessagesByDate(newMessages);
+
+            const updatedMessages = [...prev, processedMessage];
+
+            // Solo guardar en localStorage si es el chat activo
+            if (activeChat && activeChat.id === processedMessage.chatId) {
+                saveMessagesToLocalStorage(activeChat.id, updatedMessages);
+            }
+
+            return sortMessagesByDate(updatedMessages);
         });
 
-        // Actualizar último mensaje en el chat
+        // Actualizar el último mensaje en el chat
         updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
     }, [user, privateKey, activeChat, decryptMessage, updateChatLastMessage]);
 
