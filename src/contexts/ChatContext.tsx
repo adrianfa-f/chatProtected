@@ -280,20 +280,46 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         }
     }, [chats, user, encryptMessage]);
 
-    // Función para agregar un mensaje recibido por WebSocket
-    const addMessage = useCallback((message: Message) => {
-        // Solo procesar si el mensaje pertenece al chat activo
-        if (activeChat && message.chatId === activeChat.id) {
-            setMessages(prev => {
-                const existingMessage = prev.find(m => m.id === message.id);
-                if (existingMessage) return prev; // Evitar duplicados
+    // Función para actualizar la última actividad de un chat
+    const updateChatLastMessage = useCallback((chatId: string, timestamp: Date) => {
+        setChats(prevChats =>
+            prevChats.map(chat =>
+                chat.id === chatId ? { ...chat, updatedAt: timestamp } : chat
+            )
+        );
+    }, []);
 
-                const updatedMessages = [...prev, message];
-                saveMessagesToLocalStorage(activeChat.id, updatedMessages);
-                return sortMessagesByDate(updatedMessages);
-            });
+    // Función para agregar un mensaje recibido por WebSocket
+    const addMessage = useCallback(async (message: Message) => {
+        if (!user || !privateKey) return;
+
+        let processedMessage = message;
+
+        // Descifrar mensajes entrantes
+        if (message.senderId !== user.id) {
+            try {
+                const plaintext = await decryptMessage(message.ciphertext, privateKey);
+                processedMessage = { ...message, plaintext };
+            } catch (error) {
+                console.error('Error descifrando mensaje entrante', error);
+                processedMessage = { ...message, plaintext: '❌ Error al descifrar' };
+            }
         }
-    }, [activeChat]);
+
+        setMessages(prev => {
+            // Evitar duplicados
+            if (prev.some(m => m.id === processedMessage.id)) return prev;
+
+            const newMessages = [...prev, processedMessage];
+            if (activeChat?.id === processedMessage.chatId) {
+                saveMessagesToLocalStorage(processedMessage.chatId, newMessages);
+            }
+            return sortMessagesByDate(newMessages);
+        });
+
+        // Actualizar último mensaje en el chat
+        updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
+    }, [user, privateKey, activeChat, decryptMessage, updateChatLastMessage]);
 
     // Función para actualizar el estado de un usuario (online/offline)
     const setUserOnlineStatus = useCallback((userId: string, online: boolean, lastSeen?: Date) => {
@@ -323,14 +349,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         );
     }, []);
 
-    // Función para actualizar la última actividad de un chat
-    const updateChatLastMessage = useCallback((chatId: string, timestamp: Date) => {
-        setChats(prevChats =>
-            prevChats.map(chat =>
-                chat.id === chatId ? { ...chat, updatedAt: timestamp } : chat
-            )
-        );
-    }, []);
+
 
     return (
         <ChatContext.Provider value={{

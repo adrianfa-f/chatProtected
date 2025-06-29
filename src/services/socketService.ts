@@ -2,8 +2,8 @@ import { Socket } from 'socket.io-client';
 import type { Message } from '../types/types';
 
 export const joinChat = (socket: Socket | null, chatId: string) => {
-    if (!socket) {
-        console.warn('[SocketService] Intento de unirse a chat sin socket');
+    if (!socket || !socket.connected) {
+        console.warn('[SocketService] Intento de unirse a chat sin socket o socket no conectado');
         return;
     }
 
@@ -12,8 +12,8 @@ export const joinChat = (socket: Socket | null, chatId: string) => {
 };
 
 export const leaveChat = (socket: Socket | null, chatId: string) => {
-    if (!socket) {
-        console.warn('[SocketService] Intento de salir de chat sin socket');
+    if (!socket || !socket.connected) {
+        console.warn('[SocketService] Intento de salir de chat sin socket o socket no conectado');
         return;
     }
 
@@ -25,9 +25,9 @@ export const sendMessageSocket = (
     socket: Socket | null,
     message: Omit<Message, 'id' | 'createdAt'>
 ) => {
-    if (!socket) {
-        console.warn('[SocketService] Intento de enviar mensaje sin socket');
-        return;
+    if (!socket || !socket.connected) {
+        console.warn('[SocketService] Intento de enviar mensaje sin socket o socket no conectado');
+        return false;
     }
 
     console.log('[SocketService] Enviando mensaje via socket:', {
@@ -35,6 +35,7 @@ export const sendMessageSocket = (
         ciphertext: message.ciphertext.substring(0, 20) + '...'
     });
     socket.emit('send-message', message);
+    return true;
 };
 
 export const testSocketConnection = (socket: Socket | null) => {

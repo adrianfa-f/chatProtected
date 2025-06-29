@@ -15,7 +15,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     useEffect(() => {
         if (!isAuthenticated || !user) return;
 
-        // Usar import.meta.env en lugar de process.env
         const wsServer = import.meta.env.VITE_WS_SERVER || 'http://localhost:4000';
 
         const newSocket = io(wsServer, {
@@ -30,8 +29,20 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             }
         });
 
-        // Autenticar al usuario con el servidor
-        newSocket.emit('authenticate', user.id);
+        // Manejar eventos de conexión
+        newSocket.on('connect', () => {
+            console.log('[SocketProvider] Socket conectado:', newSocket.id);
+            newSocket.emit('authenticate', user.id);
+        });
+
+        newSocket.on('disconnect', (reason) => {
+            console.log('[SocketProvider] Socket desconectado:', reason);
+        });
+
+        newSocket.on('connect_error', (err) => {
+            console.error('[SocketProvider] Error de conexión:', err.message);
+        });
+
         setSocket(newSocket);
 
         return () => {

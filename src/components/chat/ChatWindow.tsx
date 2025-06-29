@@ -11,7 +11,7 @@ import { joinChat, leaveChat } from '../../services/socketService';
 import type { Message } from '../../types/types';
 
 const ChatWindow = () => {
-    const { activeChat, messages } = useChat();
+    const { activeChat, messages, addMessage } = useChat();
     const { user } = useAuth();
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -78,7 +78,7 @@ const ChatWindow = () => {
         };
     }, [activeChat?.id, socket]);
 
-    // Configurar listeners de WebSocket
+    // Configurar listeners de WebSocket para mensajes entrantes
     useEffect(() => {
         if (!socket) {
             console.log('[CHAT WINDOW] Socket no disponible para configurar listeners');
@@ -87,54 +87,25 @@ const ChatWindow = () => {
 
         console.log('[CHAT WINDOW] Configurando listeners de WebSocket');
 
+        // Handler para mensajes entrantes
         const handleReceiveMessage = (message: Message) => {
             console.log('[CHAT WINDOW] Mensaje recibido via socket:', message);
+            // Llamar a addMessage para actualizar el estado
+            addMessage(message);
         };
 
-        const handleMessageError = (error: Message) => {
+        const handleMessageError = (error: string) => {
             console.error('[CHAT WINDOW] Error al enviar mensaje:', error);
-        };
-
-        const handleTestResponse = (data: Message) => {
-            console.log('[CHAT WINDOW] Respuesta de prueba del servidor:', data);
         };
 
         socket.on('receive-message', handleReceiveMessage);
         socket.on('message-error', handleMessageError);
-        socket.on('test-response', handleTestResponse);
-
-        // Función para enviar evento de prueba
-        const sendTestEvent = () => {
-            if (activeChat?.id) {
-                console.log('[CHAT WINDOW] Enviando evento de prueba al servidor');
-                socket.emit('test-event', {
-                    chatId: activeChat.id,
-                    timestamp: Date.now(),
-                    message: 'Test from ChatWindow'
-                });
-            }
-        };
-
-        // Enviar prueba al montar
-        sendTestEvent();
-
-        // Enviar prueba periódicamente solo en desarrollo
-        if (process.env.NODE_ENV === 'development') {
-            const testInterval = setInterval(sendTestEvent, 30000);
-            return () => {
-                clearInterval(testInterval);
-                socket.off('receive-message', handleReceiveMessage);
-                socket.off('message-error', handleMessageError);
-                socket.off('test-response', handleTestResponse);
-            };
-        }
 
         return () => {
             socket.off('receive-message', handleReceiveMessage);
             socket.off('message-error', handleMessageError);
-            socket.off('test-response', handleTestResponse);
         };
-    }, [socket, activeChat?.id]);
+    }, [socket, addMessage]); // Añadir addMessage como dependencia
 
     // Scroll automático al final de los mensajes
     useEffect(() => {
