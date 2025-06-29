@@ -6,7 +6,6 @@ export const joinChat = (socket: Socket | null, chatId: string) => {
         console.warn('[SocketService] Intento de unirse a chat sin socket o socket no conectado');
         return;
     }
-
     console.log(`[SocketService] Uniendo al chat: ${chatId}`);
     socket.emit('join-chat', chatId);
 };
@@ -16,7 +15,6 @@ export const leaveChat = (socket: Socket | null, chatId: string) => {
         console.warn('[SocketService] Intento de salir de chat sin socket o socket no conectado');
         return;
     }
-
     console.log(`[SocketService] Saliendo del chat: ${chatId}`);
     socket.emit('leave-chat', chatId);
 };

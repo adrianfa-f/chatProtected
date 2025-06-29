@@ -2,10 +2,12 @@ import { useEffect } from 'react';
 import { useSocket } from '../contexts/SocketContext';
 import { useChat } from '../contexts/ChatContext';
 import type { Message } from '../types/types';
+import { useAuth } from '../contexts/AuthContext';
 
 export const useChatSocket = () => {
     const socket = useSocket();
     const { addMessage, setUserOnlineStatus } = useChat();
+    const { logout } = useAuth();
 
     useEffect(() => {
         if (!socket) return;
@@ -24,16 +26,26 @@ export const useChatSocket = () => {
             setUserOnlineStatus(data.userId, data.online, data.lastSeen);
         };
 
-        // Eventos para depuración
         const handleConnect = () => console.log('[useChatSocket] Socket conectado');
         const handleDisconnect = () => console.log('[useChatSocket] Socket desconectado');
         const handleError = (error: string) => console.error('[useChatSocket] Error de socket:', error);
+
+        const handleAuthenticated = () => {
+            console.log('[useChatSocket] Socket autenticado');
+        };
+
+        const handleInvalidToken = () => {
+            console.log('[useChatSocket] Token inválido - forzar logout');
+            logout();
+        };
 
         socket.on('receive-message', handleReceiveMessage);
         socket.on('user-status', handleUserStatus);
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
         socket.on('error', handleError);
+        socket.on('authenticated', handleAuthenticated);
+        socket.on('invalid-token', handleInvalidToken);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -46,7 +58,9 @@ export const useChatSocket = () => {
             socket.off('connect', handleConnect);
             socket.off('disconnect', handleDisconnect);
             socket.off('error', handleError);
+            socket.off('authenticated', handleAuthenticated);
+            socket.off('invalid-token', handleInvalidToken);
             socket.offAny();
         };
-    }, [socket, addMessage, setUserOnlineStatus]);
+    }, [socket, addMessage, setUserOnlineStatus, logout]);
 };
