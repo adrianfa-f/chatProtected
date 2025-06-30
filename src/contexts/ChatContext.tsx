@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import api from '../services/api';
 import type { Chat, Message, ChatRequest, User } from '../types/types';
@@ -88,6 +88,10 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const { encryptMessage, decryptMessage, isReady: isCryptoReady } = useCrypto();
 
     const socket = useSocket();
+    const activeChatRef = useRef(activeChat);
+    useEffect(() => {
+        activeChatRef.current = activeChat;
+    }, [activeChat]);
 
     const loadChats = useCallback(async () => {
         try {
@@ -295,45 +299,43 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const addMessage = useCallback(async (message: Message) => {
         if (!user || !privateKey) return;
 
-        // ⛔ Ignorar mensajes propios si vienen reemitidos por socket
+        // Ignorar mensajes propios
         if (message.senderId === user.id) {
-            console.log('[ChatContext] Ignorando mensaje propio reenviado por socket');
+            console.log('[ChatContext] Ignorando mensaje propio');
             return;
         }
 
-        // ⛔ Ignorar si aún no hay un chat activo o no es el chat correspondiente
-        if (!activeChat || message.chatId !== activeChat.id) {
-            console.warn('[ChatContext] Mensaje recibido fuera del chat activo:', message.chatId);
-            return;
-        }
-
-        console.log('[ChatContext] Agregando mensaje recibido:', message);
+        console.log('[ChatContext] Mensaje recibido para chat:', message.chatId);
 
         let processedMessage = message;
 
-        // 🔐 Solo descifrar si el mensaje no es propio
         try {
             const plaintext = await decryptMessage(message.ciphertext, privateKey);
             processedMessage = { ...message, plaintext };
         } catch (error) {
-            console.error('[ChatContext] Error descifrando mensaje entrante', error);
+            console.error(error)
             processedMessage = { ...message, plaintext: '❌ Error al descifrar' };
         }
 
-        setMessages(prev => {
-            // ⛔ Evitar duplicados exactos
-            if (prev.some(m => m.id === processedMessage.id)) {
-                console.warn('[ChatContext] Mensaje duplicado ignorado:', processedMessage.id);
-                return prev;
-            }
+        // GUARDAR SIEMPRE EN LOCALSTORAGE (sin depender de activeChat)
+        const cachedMessages = loadMessagesFromLocalStorage(processedMessage.chatId) || [];
+        const updatedMessages = [...cachedMessages, processedMessage];
+        saveMessagesToLocalStorage(processedMessage.chatId, updatedMessages);
 
-            const updatedMessages = [...prev, processedMessage];
-            saveMessagesToLocalStorage(activeChat.id, updatedMessages);
-            return sortMessagesByDate(updatedMessages);
-        });
+        // Solo actualizar estado si es el chat activo
+        const currentActiveChat = activeChatRef.current;
+        if (currentActiveChat && currentActiveChat.id === processedMessage.chatId) {
+            setMessages(prev => {
+                // Evitar duplicados
+                if (prev.some(m => m.id === processedMessage.id)) return prev;
+
+                const newMessages = [...prev, processedMessage];
+                return sortMessagesByDate(newMessages);
+            });
+        }
 
         updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
-    }, [user, privateKey, activeChat, decryptMessage, updateChatLastMessage]);
+    }, [user, privateKey, decryptMessage, updateChatLastMessage]);
 
     // Función para actualizar el estado de un usuario (online/offline)
     const setUserOnlineStatus = useCallback((userId: string, online: boolean, lastSeen?: Date) => {

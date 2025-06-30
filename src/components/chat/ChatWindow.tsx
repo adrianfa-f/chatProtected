@@ -7,10 +7,9 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { joinChat, leaveChat } from '../../services/socketService';
-import type { Message } from '../../types/types';
 
 const ChatWindow = () => {
-    const { activeChat, messages, addMessage } = useChat();
+    const { activeChat, messages } = useChat();
     const { user } = useAuth();
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -47,36 +46,6 @@ const ChatWindow = () => {
         joinChat(socket, activeChat.id);
         return () => leaveChat(socket, activeChat.id);
     }, [socket, activeChat?.id]);
-
-    useEffect(() => {
-        if (!socket?.connected) return;
-
-        const handleReceiveMessage = (message: Message) => {
-            if (message.senderId === user?.id) {
-                console.log('[ChatWindow] Ignorando mensaje propio reenviado por socket:', message);
-                return;
-            }
-
-            console.log('[ChatWindow] Mensaje recibido via socket:', message);
-            addMessage(message);
-        };
-
-        const handleMessageError = (error: string) => {
-            console.error('[ChatWindow] Error al enviar mensaje:', error);
-        };
-
-        socket.on('receive-message', handleReceiveMessage);
-        socket.on('message-error', handleMessageError);
-        socket.onAny((event, ...args) => {
-            console.log(`[WS DEBUG] Evento recibido: ${event}`, args);
-        });
-
-        return () => {
-            socket.off('receive-message', handleReceiveMessage);
-            socket.off('message-error', handleMessageError);
-            socket.offAny();
-        };
-    }, [socket, addMessage, user?.id]);
 
     useEffect(() => {
         if (messages.length > 0 && messagesEndRef.current) {
