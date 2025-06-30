@@ -2,7 +2,7 @@ import api from './api';
 import { generateKeyPair } from './cryptoService';
 
 export const login = async (username: string, password: string) => {
-    const response = await api.post('/auth/login', { username, password });
+    const response = await api.post('/api/auth/login', { username, password });
 
     // Extraer datos necesarios
     const { user } = response.data.data;
@@ -26,7 +26,7 @@ export const login = async (username: string, password: string) => {
 export const register = async (username: string, password: string) => {
     const { publicKey, privateKey } = await generateKeyPair();
 
-    const response = await api.post('/auth/register', {
+    const response = await api.post('/api/auth/register', {
         username,
         password,
         publicKey

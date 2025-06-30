@@ -10,7 +10,7 @@ export const getUserPublicKey = async (userId: string): Promise<string> => {
     }
 
     try {
-        const response = await api.get(`/users/${userId}/public-key`);
+        const response = await api.get(`/api/users/${userId}/public-key`);
         const publicKey = response.data.publicKey;
 
         // Almacenar en caché

@@ -28,7 +28,7 @@ const sortMessagesByDate = (messages: Message[]): Message[] => {
 
 // Servicios necesarios
 const getMessages = async (chatId: string): Promise<Message[]> => {
-    const response = await api.get(`/messages/${chatId}`);
+    const response = await api.get(`/api/messages/${chatId}`);
     return response.data.data;
 };
 
@@ -38,7 +38,7 @@ const sendMessageService = async (data: {
     ciphertext: string;
     userId: string;
 }): Promise<Message> => {
-    const response = await api.post('/messages', {
+    const response = await api.post('/api/messages', {
         ...data,
         nonce: null
     });
@@ -46,12 +46,12 @@ const sendMessageService = async (data: {
 };
 
 const getChatRequests = async (): Promise<ChatRequest[]> => {
-    const response = await api.get('/chat-requests');
+    const response = await api.get('/api/chat-requests');
     return response.data;
 };
 
 const respondToRequestService = async (requestId: string, accepted: boolean): Promise<ChatRequest> => {
-    const response = await api.patch(`/chat-requests/${requestId}`, {
+    const response = await api.patch(`/api/chat-requests/${requestId}`, {
         status: accepted ? 'accepted' : 'rejected'
     });
     return response.data; // Asegurarse de devolver solo response.data
@@ -91,7 +91,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     const loadChats = useCallback(async () => {
         try {
-            const response = await api.get('/chats/');
+            const response = await api.get('/api/chats/');
             setChats(response.data.data);
         } catch (error) {
             console.error('Error loading chats:', error);
@@ -121,7 +121,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     const searchAndRequestUser = useCallback(async (query: string): Promise<User[]> => {
         try {
-            const response = await api.get(`/users/search?query=${query}`);
+            const response = await api.get(`/api/users/search?query=${query}`);
             return response.data;
         } catch (error) {
             console.error('Error searching users:', error);
@@ -294,6 +294,12 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     // Función para agregar un mensaje recibido por WebSocket
     const addMessage = useCallback(async (message: Message) => {
         if (!user || !privateKey) return;
+
+        // ✋ Ignorar mensajes propios si vienen desde el socket
+        if (message.senderId === user.id) {
+            console.log('[ChatContext] Ignorando mensaje propio reenviado por socket');
+            return;
+        }
 
         console.log('[ChatContext] Agregando mensaje recibido:', message);
 
