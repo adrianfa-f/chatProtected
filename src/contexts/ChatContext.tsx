@@ -4,6 +4,9 @@ import api from '../services/api';
 import type { Chat, Message, ChatRequest, User } from '../types/types';
 import { useCrypto } from '../hooks/useCrypto';
 import { getUserPublicKey } from '../services/userService';
+import { useSocket } from './SocketContext';
+import { sendMessageSocket } from '../services/socketService';
+
 
 // Funciones para localStorage
 const saveMessagesToLocalStorage = (chatId: string, messages: Message[]) => {
@@ -83,6 +86,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { user, privateKey } = useAuth();
     const { encryptMessage, decryptMessage, isReady: isCryptoReady } = useCrypto();
+
+    const socket = useSocket();
 
     const loadChats = useCallback(async () => {
         try {
@@ -202,38 +207,44 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         if (!user) return;
 
         try {
-            // 1. Identificar chat y destinatario
             const chat = chats.find(c => c.id === chatId);
             if (!chat) throw new Error('Chat not found');
 
             const recipientId = chat.user1.id === user.id ? chat.user2.id : chat.user1.id;
 
-            // 2. Obtener clave pública del destinatario
             const publicKey = await getUserPublicKey(recipientId);
-
-            // 3. Cifrar mensaje
             const ciphertext = await encryptMessage(content, publicKey);
 
-            // 4. Crear mensaje temporal
             const tempMessage: Message = {
                 id: `temp_${Date.now()}`,
                 chatId,
                 senderId: user.id,
-                receiverId: recipientId, // Agregar receiverId
+                receiverId: recipientId,
                 ciphertext,
                 plaintext: content,
                 createdAt: new Date(),
                 status: 'sending'
             };
 
-            // 5. Agregar a UI y localStorage
             setMessages(prev => {
-                const updatedMessages = [...prev, tempMessage];
-                saveMessagesToLocalStorage(chatId, updatedMessages);
-                return sortMessagesByDate(updatedMessages);
+                const updated = [...prev, tempMessage];
+                saveMessagesToLocalStorage(chatId, updated);
+                return sortMessagesByDate(updated);
             });
 
-            // 6. Enviar al backend (ahora se enviará también por WebSocket, pero lo mantenemos por si acaso)
+            // 🔄 Emitir por WebSocket
+            const socketMessage = {
+                chatId,
+                senderId: user.id,
+                receiverId: recipientId,
+                ciphertext,
+            };
+            const socketOk = sendMessageSocket(socket, socketMessage);
+            if (!socketOk) {
+                console.warn('[ChatContext] No se pudo emitir el mensaje por WebSocket');
+            }
+
+            // 💾 Persistir en backend
             const response = await sendMessageService({
                 chatId,
                 receiverId: recipientId,
@@ -241,44 +252,35 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                 userId: user.id
             });
 
-            // 7. Extraer solo los datos del mensaje de la respuesta
             const sentMessage = response;
 
-            // 8. Actualizar mensaje temporal con respuesta del servidor
             setMessages(prev => {
-                const updatedMessages = prev.map(msg => {
+                const updated = prev.map(msg => {
                     if (msg.id === tempMessage.id) {
                         return {
                             ...sentMessage,
-                            plaintext: content, // Preservar texto plano
+                            plaintext: content,
                             status: 'sent' as const
                         };
                     }
                     return msg;
                 });
 
-                saveMessagesToLocalStorage(chatId, updatedMessages);
-                return sortMessagesByDate(updatedMessages);
+                saveMessagesToLocalStorage(chatId, updated);
+                return sortMessagesByDate(updated);
             });
 
         } catch (error) {
             console.error('Error sending message:', error);
             setMessages(prev => {
-                const updatedMessages = prev.map(msg => {
-                    if (msg.id.startsWith('temp_')) {
-                        return {
-                            ...msg,
-                            status: 'failed' as const
-                        };
-                    }
-                    return msg;
-                });
-
-                saveMessagesToLocalStorage(chatId, updatedMessages);
-                return updatedMessages;
+                const updated = prev.map(msg =>
+                    msg.id.startsWith('temp_') ? { ...msg, status: 'failed' as const } : msg
+                );
+                saveMessagesToLocalStorage(chatId, updated);
+                return updated;
             });
         }
-    }, [chats, user, encryptMessage]);
+    }, [chats, user, encryptMessage, socket]);
 
     // Función para actualizar la última actividad de un chat
     const updateChatLastMessage = useCallback((chatId: string, timestamp: Date) => {
