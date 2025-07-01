@@ -297,43 +297,62 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Función para agregar un mensaje recibido por WebSocket
     const addMessage = useCallback(async (message: Message) => {
-        if (!user || !privateKey) return;
-
-        // Ignorar mensajes propios reenviados por socket
-        if (message.senderId === user.id) {
-            console.log('[ChatContext] Ignorando mensaje propio');
+        if (!user || !privateKey) {
+            console.warn('[ChatContext] addMessage abortado — falta user o privateKey');
             return;
         }
 
-        console.log('[ChatContext] Mensaje recibido para chat:', message.chatId);
+        if (message.senderId === user.id) {
+            console.log('[ChatContext] Ignorando mensaje propio reenviado');
+            return;
+        }
+
+        console.log('[ChatContext] ▶️ Procesando mensaje entrante:', {
+            id: message.id,
+            chatId: message.chatId,
+            senderId: message.senderId,
+            createdAt: message.createdAt,
+        });
 
         let processedMessage = message;
 
         try {
             const plaintext = await decryptMessage(message.ciphertext, privateKey);
             processedMessage = { ...message, plaintext };
+            console.log('[ChatContext] 🔓 Mensaje descifrado con éxito:', { id: message.id });
         } catch (error) {
-            console.error('[ChatContext] Error al descifrar mensaje:', error);
+            console.error('[ChatContext] ❌ Error al descifrar mensaje:', error);
             processedMessage = { ...message, plaintext: '❌ Error al descifrar' };
         }
 
-        // ❌ Ya no guardamos los mensajes recibidos en localStorage
-        // Esto evita duplicación en rehidratación al refrescar
-
-        // ✅ Solo actualizar estado si el chat activo coincide
         const currentActiveChat = activeChatRef.current;
+        console.log('[ChatContext] Estado de activeChatRef:', {
+            activeChatId: currentActiveChat?.id,
+            incomingMessageChatId: processedMessage.chatId,
+        });
+
         if (currentActiveChat && currentActiveChat.id === processedMessage.chatId) {
+            console.log('[ChatContext] ✅ Chat activo coincide, actualizando estado');
+
             setMessages(prev => {
-                if (prev.some(m => m.id === processedMessage.id)) return prev;
+                const existe = prev.some(m => m.id === processedMessage.id);
+                if (existe) {
+                    console.warn('[ChatContext] ⛔ Mensaje duplicado ignorado en estado:', processedMessage.id);
+                    return [...prev]; // fuerza rerender
+                }
 
                 const newMessages = [...prev, processedMessage];
+                console.log('[ChatContext] 📝 Mensaje agregado a estado. Total mensajes:', newMessages.length);
                 return sortMessagesByDate(newMessages);
             });
+        } else {
+            console.log('[ChatContext] ⚠️ Chat no activo. Mensaje no actualizado en UI (pero sí en preview).');
         }
 
-        // ✅ Igual actualizamos el preview del último mensaje en la lista de chats
+        console.log('[ChatContext] 🧭 Actualizando vista previa de último mensaje en lista de chats');
         updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
     }, [user, privateKey, decryptMessage, updateChatLastMessage]);
+
 
 
     // Función para actualizar el estado de un usuario (online/offline)
