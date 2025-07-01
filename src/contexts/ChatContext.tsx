@@ -345,10 +345,14 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             console.log('[ChatContext] ✅ Chat activo coincide, actualizando estado');
 
             setMessages(prev => {
-                const existe = prev.some(m => m.id === processedMessage.id);
+                const existe = prev.some(m =>
+                    m.id === processedMessage.id ||
+                    (m.senderId === processedMessage.senderId && m.ciphertext === processedMessage.ciphertext)
+                );
+
                 if (existe) {
-                    console.warn('[ChatContext] ⛔ Mensaje duplicado ignorado en estado:', processedMessage.id);
-                    return [...prev]; // fuerza rerender
+                    console.warn('[ChatContext] ⛔ Mensaje duplicado ignorado por contenido:', processedMessage.id);
+                    return [...prev]; // mantiene referencia nueva
                 }
 
                 const newMessages = [...prev, processedMessage];
@@ -362,6 +366,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         console.log('[ChatContext] 🧭 Actualizando vista previa de último mensaje en lista de chats');
         updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
     }, [user, privateKey, decryptMessage, updateChatLastMessage]);
+
 
 
 
