@@ -298,32 +298,30 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
         // 🔄 Actualizar estado y almacenamiento
         setMessages(prev => {
-            // 🧹 Reemplazar mensaje optimista si existe
-            const existingIndex = prev.findIndex(m =>
+            // 🔄 Filtrar elementos undefined
+            const cleanPrev = prev.filter(m => m !== undefined);
+
+            // 🧹 Buscar mensaje optimista
+            const existingIndex = cleanPrev.findIndex(m =>
                 m.id.startsWith('optimistic_') &&
                 m.ciphertext === processedMessage.ciphertext &&
                 Math.abs(
                     new Date(m.createdAt).getTime() -
                     new Date(processedMessage.createdAt).getTime()
-                ) < 5000 // 5 segundos de margen
+                ) < 5000
             );
 
-            const newMessages = [...prev];
+            const newMessages = [...cleanPrev];
 
             if (existingIndex !== -1) {
-                // 🔄 Reemplazar mensaje optimista por el real
                 newMessages[existingIndex] = processedMessage;
                 console.log('[ChatContext] 🔄 Mensaje optimista reemplazado');
             } else {
-                // ➕ Añadir nuevo mensaje
                 newMessages.push(processedMessage);
                 console.log('[ChatContext] ➕ Nuevo mensaje añadido');
             }
 
-            // 📥 Ordenar
             const sortedMessages = sortMessagesByDate(newMessages);
-
-            // 💾 Guardar en localStorage
             saveMessagesToLocalStorage(processedMessage.chatId, sortedMessages);
 
             return sortedMessages;
