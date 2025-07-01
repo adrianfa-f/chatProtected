@@ -21,7 +21,7 @@ export const leaveChat = (socket: Socket | null, chatId: string) => {
 
 export const sendMessageSocket = (
     socket: Socket | null,
-    message: Omit<Message, 'id' | 'createdAt'>
+    message: Omit<Message, 'id'>
 ) => {
     if (!socket || !socket.connected) return false;
 

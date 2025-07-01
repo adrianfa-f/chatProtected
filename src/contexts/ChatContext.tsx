@@ -32,19 +32,6 @@ const getMessages = async (chatId: string): Promise<Message[]> => {
     return response.data.data;
 };
 
-const sendMessageService = async (data: {
-    chatId: string;
-    receiverId: string;
-    ciphertext: string;
-    userId: string;
-}): Promise<Message> => {
-    const response = await api.post('/api/messages', {
-        ...data,
-        nonce: null
-    });
-    return response.data.data;
-};
-
 const getChatRequests = async (): Promise<ChatRequest[]> => {
     const response = await api.get('/api/chat-requests');
     return response.data;
@@ -215,77 +202,46 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             if (!chat) throw new Error('Chat not found');
 
             const recipientId = chat.user1.id === user.id ? chat.user2.id : chat.user1.id;
-
             const publicKey = await getUserPublicKey(recipientId);
             const ciphertext = await encryptMessage(content, publicKey);
 
-            const tempMessage: Message = {
-                id: `temp_${Date.now()}`,
+            // 📅 Crear timestamp ISO para sincronización
+            const createdAt = new Date().toISOString();
+
+            // 📨 Emitir directamente por WebSocket (sin HTTP)
+            const socketOk = sendMessageSocket(socket, {
+                chatId,
+                senderId: user.id,
+                receiverId: recipientId,
+                ciphertext,
+                createdAt
+            });
+
+            if (!socketOk) {
+                throw new Error('Failed to send via WebSocket');
+            }
+
+            // 💾 Crear mensaje optimista
+            const optimisticMessage: Message = {
+                id: `optimistic_${Date.now()}`,
                 chatId,
                 senderId: user.id,
                 receiverId: recipientId,
                 ciphertext,
                 plaintext: content,
-                createdAt: new Date().toISOString(),
+                createdAt,
                 status: 'sending'
             };
 
+            // 📥 Actualizar UI inmediatamente
             setMessages(prev => {
-                const updated = [...prev, tempMessage];
-                saveMessagesToLocalStorage(chatId, updated);
-                return sortMessagesByDate(updated);
-            });
-
-            // 🔄 Emitir por WebSocket
-            const socketMessage = {
-                id: tempMessage.id,
-                chatId: tempMessage.chatId,
-                senderId: tempMessage.senderId,
-                receiverId: tempMessage.receiverId,
-                ciphertext: tempMessage.ciphertext,
-                createdAt: tempMessage.createdAt
-            };
-
-            const socketOk = sendMessageSocket(socket, socketMessage);
-            if (!socketOk) {
-                console.warn('[ChatContext] No se pudo emitir el mensaje por WebSocket');
-            }
-
-            // 💾 Persistir en backend
-            const response = await sendMessageService({
-                chatId,
-                receiverId: recipientId,
-                ciphertext,
-                userId: user.id
-            });
-
-            const sentMessage = response;
-
-            setMessages(prev => {
-                const updated = prev.map(msg => {
-                    if (msg.id === tempMessage.id) {
-                        return {
-                            ...sentMessage,
-                            plaintext: content,
-                            status: 'sent' as const
-                        };
-                    }
-                    return msg;
-                });
-
+                const updated = [...prev, optimisticMessage];
                 saveMessagesToLocalStorage(chatId, updated);
                 return sortMessagesByDate(updated);
             });
 
         } catch (error) {
             console.error('Error sending message:', error);
-            setMessages(prev => {
-                const updated = prev.map(msg =>
-                    msg.id.startsWith('temp_') ? { ...msg, status: 'failed' as const } : msg
-                );
-                saveMessagesToLocalStorage(chatId, updated);
-                return updated;
-            });
         }
     }, [chats, user, encryptMessage, socket]);
 
@@ -305,19 +261,10 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
 
-        if (message.senderId === user.id) {
-            console.log('[ChatContext] Ignorando mensaje propio reenviado');
+        // 🛡️ Validación de mensaje crítico
+        if (!message.id || !message.ciphertext || !message.createdAt) {
+            console.error('[ChatContext] 🛑 Mensaje inválido recibido:', message);
             return;
-        }
-
-        if (!message.id || !message.createdAt) {
-            console.error('[ChatContext] 🛑 Mensaje llegó incompleto desde socket:', {
-                id: message.id,
-                createdAt: message.createdAt,
-                chatId: message.chatId,
-                senderId: message.senderId
-            });
-            return; // 🧤 No seguimos si la fuente no es confiable
         }
 
         console.log('[ChatContext] ▶️ Procesando mensaje entrante:', {
@@ -327,46 +274,62 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             createdAt: message.createdAt,
         });
 
-        let processedMessage = message;
+        let plaintext = '❌ Error al descifrar';
 
         try {
-            const plaintext = await decryptMessage(message.ciphertext, privateKey);
-            processedMessage = { ...message, plaintext };
-            console.log('[ChatContext] 🔓 Mensaje descifrado con éxito:', { id: message.id });
+            if (message.senderId !== user.id) {
+                // Mensaje de otro usuario: descifrar
+                plaintext = await decryptMessage(message.ciphertext, privateKey);
+                console.log('[ChatContext] 🔓 Mensaje descifrado con éxito:', { id: message.id });
+            } else {
+                // Mensaje propio: usar plaintext existente
+                plaintext = message.plaintext || 'Mensaje propio';
+                console.log('[ChatContext] 🔄 Mensaje propio procesado');
+            }
         } catch (error) {
             console.error('[ChatContext] ❌ Error al descifrar mensaje:', error);
-            processedMessage = { ...message, plaintext: '❌ Error al descifrar' };
         }
 
-        const currentActiveChat = activeChatRef.current;
-        console.log('[ChatContext] Estado de activeChatRef:', {
-            activeChatId: currentActiveChat?.id,
-            incomingMessageChatId: processedMessage.chatId,
+        const processedMessage: Message = {
+            ...message,
+            plaintext,
+            status: 'sent'
+        };
+
+        // 🔄 Actualizar estado y almacenamiento
+        setMessages(prev => {
+            // 🧹 Reemplazar mensaje optimista si existe
+            const existingIndex = prev.findIndex(m =>
+                m.id.startsWith('optimistic_') &&
+                m.ciphertext === processedMessage.ciphertext &&
+                Math.abs(
+                    new Date(m.createdAt).getTime() -
+                    new Date(processedMessage.createdAt).getTime()
+                ) < 5000 // 5 segundos de margen
+            );
+
+            const newMessages = [...prev];
+
+            if (existingIndex !== -1) {
+                // 🔄 Reemplazar mensaje optimista por el real
+                newMessages[existingIndex] = processedMessage;
+                console.log('[ChatContext] 🔄 Mensaje optimista reemplazado');
+            } else {
+                // ➕ Añadir nuevo mensaje
+                newMessages.push(processedMessage);
+                console.log('[ChatContext] ➕ Nuevo mensaje añadido');
+            }
+
+            // 📥 Ordenar
+            const sortedMessages = sortMessagesByDate(newMessages);
+
+            // 💾 Guardar en localStorage
+            saveMessagesToLocalStorage(processedMessage.chatId, sortedMessages);
+
+            return sortedMessages;
         });
 
-        if (currentActiveChat && currentActiveChat.id === processedMessage.chatId) {
-            console.log('[ChatContext] ✅ Chat activo coincide, actualizando estado');
-
-            setMessages(prev => {
-                const existe = prev.some(m =>
-                    m.id === processedMessage.id ||
-                    (m.senderId === processedMessage.senderId && m.ciphertext === processedMessage.ciphertext)
-                );
-
-                if (existe) {
-                    console.warn('[ChatContext] ⛔ Mensaje duplicado ignorado por contenido:', processedMessage.id);
-                    return [...prev]; // mantiene referencia nueva
-                }
-
-                const newMessages = [...prev, processedMessage];
-                console.log('[ChatContext] 📝 Mensaje agregado a estado. Total mensajes:', newMessages.length);
-                return sortMessagesByDate(newMessages);
-            });
-        } else {
-            console.log('[ChatContext] ⚠️ Chat no activo. Mensaje no actualizado en UI (pero sí en preview).');
-        }
-
-        console.log('[ChatContext] 🧭 Actualizando vista previa de último mensaje en lista de chats');
+        // 📅 Actualizar última actividad del chat
         updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
     }, [user, privateKey, decryptMessage, updateChatLastMessage]);
 
