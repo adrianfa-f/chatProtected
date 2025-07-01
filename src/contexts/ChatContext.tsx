@@ -215,7 +215,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                 ciphertext,
                 plaintext: content,
                 createdAt: new Date().toISOString(),
-                status: 'sending'
             };
 
             setMessages(prev => {
@@ -240,7 +239,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                         return {
                             ...sentMessage,
                             plaintext: content,
-                            status: 'sent' as const
                         };
                     }
                     return msg;
@@ -252,13 +250,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
         } catch (error) {
             console.error('Error sending message:', error);
-            setMessages(prev => {
-                const updated = prev.map(msg =>
-                    msg.id.startsWith('temp_') ? { ...msg, status: 'failed' as const } : msg
-                );
-                saveMessagesToLocalStorage(chatId, updated);
-                return updated;
-            });
         }
     }, [chats, user, encryptMessage]); // Eliminada dependencia de socket
 
