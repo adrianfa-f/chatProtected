@@ -238,11 +238,14 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
             // 🔄 Emitir por WebSocket
             const socketMessage = {
-                chatId,
-                senderId: user.id,
-                receiverId: recipientId,
-                ciphertext,
+                id: tempMessage.id,
+                chatId: tempMessage.chatId,
+                senderId: tempMessage.senderId,
+                receiverId: tempMessage.receiverId,
+                ciphertext: tempMessage.ciphertext,
+                createdAt: tempMessage.createdAt
             };
+
             const socketOk = sendMessageSocket(socket, socketMessage);
             if (!socketOk) {
                 console.warn('[ChatContext] No se pudo emitir el mensaje por WebSocket');
@@ -302,19 +305,19 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
 
-        if (!message.id) {
-            message.id = `fallback_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            console.warn('[ChatContext] ⚠️ Mensaje recibido sin ID. Se asignó ID temporal:', message.id);
-        }
-
-        if (!message.createdAt) {
-            message.createdAt = new Date().toISOString();
-            console.warn('[ChatContext] ⚠️ Mensaje sin createdAt. Se asignó fecha actual:', message.createdAt);
-        }
-
         if (message.senderId === user.id) {
             console.log('[ChatContext] Ignorando mensaje propio reenviado');
             return;
+        }
+
+        if (!message.id || !message.createdAt) {
+            console.error('[ChatContext] 🛑 Mensaje llegó incompleto desde socket:', {
+                id: message.id,
+                createdAt: message.createdAt,
+                chatId: message.chatId,
+                senderId: message.senderId
+            });
+            return; // 🧤 No seguimos si la fuente no es confiable
         }
 
         console.log('[ChatContext] ▶️ Procesando mensaje entrante:', {

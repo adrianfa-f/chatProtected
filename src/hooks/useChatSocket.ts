@@ -7,12 +7,17 @@ import { useAuth } from '../contexts/AuthContext';
 export const useChatSocket = () => {
     const socket = useSocket();
     const { addMessage, setUserOnlineStatus } = useChat();
-    const { logout } = useAuth();
+    const { logout, user } = useAuth();
 
     useEffect(() => {
         if (!socket) return;
 
         const handleReceiveMessage = (message: Message) => {
+            if (!socket?.connected || !user) return;
+            if (message.senderId === user.id) {
+                console.log('[Socket] Ignorando mensaje emitido por uno mismo');
+                return; // 💥 Esta es la línea mágica
+            }
             console.log('[useChatSocket] Mensaje recibido', message);
             addMessage(message);
         };
@@ -62,5 +67,5 @@ export const useChatSocket = () => {
             socket.off('invalid-token', handleInvalidToken);
             socket.offAny();
         };
-    }, [socket, addMessage, setUserOnlineStatus, logout]);
+    }, [socket, addMessage, setUserOnlineStatus, logout, user]);
 };
