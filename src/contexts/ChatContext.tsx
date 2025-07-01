@@ -197,52 +197,34 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const sendMessage = useCallback(async (chatId: string, content: string) => {
         if (!user) return;
 
-        try {
-            const chat = chats.find(c => c.id === chatId);
-            if (!chat) throw new Error('Chat not found');
+        const chat = chats.find(c => c.id === chatId);
+        if (!chat) return;
 
-            const recipientId = chat.user1.id === user.id ? chat.user2.id : chat.user1.id;
-            const publicKey = await getUserPublicKey(recipientId);
-            const ciphertext = await encryptMessage(content, publicKey);
+        const recipientId = chat.user1.id === user.id ? chat.user2.id : chat.user1.id;
+        const publicKey = await getUserPublicKey(recipientId);
+        const ciphertext = await encryptMessage(content, publicKey);
 
-            // 📅 Crear timestamp ISO para sincronización
-            const createdAt = new Date().toISOString();
+        // Crear mensaje temporal con ID único
+        const tempId = `temp_${Date.now()}`;
+        const tempMessage: Message = {
+            id: tempId,
+            chatId,
+            senderId: user.id,
+            receiverId: recipientId,
+            ciphertext,
+            plaintext: content,
+            createdAt: new Date().toISOString()
+        };
 
-            // 📨 Emitir directamente por WebSocket (sin HTTP)
-            const socketOk = sendMessageSocket(socket, {
-                chatId,
-                senderId: user.id,
-                receiverId: recipientId,
-                ciphertext,
-                createdAt
-            });
+        // Guardar en estado y localStorage
+        setMessages(prev => {
+            const updated = [...prev, tempMessage];
+            saveMessagesToLocalStorage(chatId, updated);
+            return sortMessagesByDate(updated);
+        });
 
-            if (!socketOk) {
-                throw new Error('Failed to send via WebSocket');
-            }
-
-            // 💾 Crear mensaje optimista
-            const optimisticMessage: Message = {
-                id: `optimistic_${Date.now()}`,
-                chatId,
-                senderId: user.id,
-                receiverId: recipientId,
-                ciphertext,
-                plaintext: content,
-                createdAt,
-                status: 'sending'
-            };
-
-            // 📥 Actualizar UI inmediatamente
-            setMessages(prev => {
-                const updated = [...prev, optimisticMessage];
-                saveMessagesToLocalStorage(chatId, updated);
-                return sortMessagesByDate(updated);
-            });
-
-        } catch (error) {
-            console.error('Error sending message:', error);
-        }
+        // Enviar SOLO por socket
+        sendMessageSocket(socket, tempMessage);
     }, [chats, user, encryptMessage, socket]);
 
     // Función para actualizar la última actividad de un chat
@@ -255,81 +237,47 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     // Función para agregar un mensaje recibido por WebSocket
-    const addMessage = useCallback(async (message: Message) => {
-        if (!user || !privateKey) {
-            console.warn('[ChatContext] addMessage abortado — falta user o privateKey');
-            return;
-        }
+    const addMessage = useCallback(async (realMessage: Message) => {
+        if (!user || !privateKey) return;
 
-        // 🛡️ Validación de mensaje crítico
-        if (!message.id || !message.ciphertext || !message.createdAt) {
-            console.error('[ChatContext] 🛑 Mensaje inválido recibido:', message);
-            return;
-        }
-
-        console.log('[ChatContext] ▶️ Procesando mensaje entrante:', {
-            id: message.id,
-            chatId: message.chatId,
-            senderId: message.senderId,
-            createdAt: message.createdAt,
-        });
-
-        let plaintext = '❌ Error al descifrar';
-
-        try {
-            if (message.senderId !== user.id) {
-                // Mensaje de otro usuario: descifrar
-                plaintext = await decryptMessage(message.ciphertext, privateKey);
-                console.log('[ChatContext] 🔓 Mensaje descifrado con éxito:', { id: message.id });
-            } else {
-                // Mensaje propio: usar plaintext existente
-                plaintext = message.plaintext || 'Mensaje propio';
-                console.log('[ChatContext] 🔄 Mensaje propio procesado');
+        // Descifrar solo si es mensaje recibido
+        let plaintext = realMessage.plaintext;
+        if (realMessage.senderId !== user.id) {
+            try {
+                plaintext = await decryptMessage(realMessage.ciphertext, privateKey);
+            } catch (error) {
+                plaintext = '❌ Error al descifrar';
+                console.error('Error descifrando:', error);
             }
-        } catch (error) {
-            console.error('[ChatContext] ❌ Error al descifrar mensaje:', error);
         }
 
-        const processedMessage: Message = {
-            ...message,
-            plaintext,
-            status: 'sent'
+        const fullMessage = {
+            ...realMessage,
+            plaintext
         };
 
-        // 🔄 Actualizar estado y almacenamiento
+        // Actualizar estado reemplazando temporal
         setMessages(prev => {
-            // 🔄 Filtrar elementos undefined
-            const cleanPrev = prev.filter(m => m !== undefined);
-
-            // 🧹 Buscar mensaje optimista
-            const existingIndex = cleanPrev.findIndex(m =>
-                m.id.startsWith('optimistic_') &&
-                m.ciphertext === processedMessage.ciphertext &&
-                Math.abs(
-                    new Date(m.createdAt).getTime() -
-                    new Date(processedMessage.createdAt).getTime()
-                ) < 5000
+            // Buscar y reemplazar mensaje temporal
+            const updated = prev.map(msg =>
+                msg.id === `temp_${realMessage.createdAt}` || // Relación temporal
+                    msg.ciphertext === realMessage.ciphertext ?  // O por contenido
+                    fullMessage : msg
             );
 
-            const newMessages = [...cleanPrev];
-
-            if (existingIndex !== -1) {
-                newMessages[existingIndex] = processedMessage;
-                console.log('[ChatContext] 🔄 Mensaje optimista reemplazado');
-            } else {
-                newMessages.push(processedMessage);
-                console.log('[ChatContext] ➕ Nuevo mensaje añadido');
+            // Si no estaba el temporal, añadir nuevo
+            if (!updated.some(msg => msg.id === fullMessage.id)) {
+                updated.push(fullMessage);
             }
 
-            const sortedMessages = sortMessagesByDate(newMessages);
-            saveMessagesToLocalStorage(processedMessage.chatId, sortedMessages);
-
-            return sortedMessages;
+            const sorted = sortMessagesByDate(updated);
+            saveMessagesToLocalStorage(fullMessage.chatId, sorted);
+            return sorted;
         });
 
-        // 📅 Actualizar última actividad del chat
-        updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
-    }, [user, privateKey, decryptMessage, updateChatLastMessage]);
+        // Actualizar última actividad del chat
+        updateChatLastMessage(fullMessage.chatId, new Date(fullMessage.createdAt));
+    }, [user, privateKey, updateChatLastMessage, decryptMessage]);
 
 
 
