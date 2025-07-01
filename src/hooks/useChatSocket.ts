@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useSocket } from '../contexts/SocketContext';
 import { useChat } from '../contexts/ChatContext';
-import { useAuth } from '../contexts/AuthContext';
 import type { Message } from '../types/types';
+import { useAuth } from '../contexts/AuthContext';
 
 export const useChatSocket = () => {
     const socket = useSocket();
@@ -29,7 +29,11 @@ export const useChatSocket = () => {
         const handleConnect = () => console.log('[useChatSocket] Socket conectado');
         const handleDisconnect = () => console.log('[useChatSocket] Socket desconectado');
         const handleError = (error: string) => console.error('[useChatSocket] Error de socket:', error);
-        const handleAuthenticated = () => console.log('[useChatSocket] Socket autenticado');
+
+        const handleAuthenticated = () => {
+            console.log('[useChatSocket] Socket autenticado');
+        };
+
         const handleInvalidToken = () => {
             console.log('[useChatSocket] Token inválido - forzar logout');
             logout();
@@ -43,6 +47,11 @@ export const useChatSocket = () => {
         socket.on('authenticated', handleAuthenticated);
         socket.on('invalid-token', handleInvalidToken);
 
+        // Registrar todos los eventos para depuración
+        socket.onAny((event, ...args) => {
+            console.log(`[useChatSocket] Evento recibido: ${event}`, args);
+        });
+
         return () => {
             socket.off('receive-message', handleReceiveMessage);
             socket.off('user-status', handleUserStatus);
@@ -51,6 +60,7 @@ export const useChatSocket = () => {
             socket.off('error', handleError);
             socket.off('authenticated', handleAuthenticated);
             socket.off('invalid-token', handleInvalidToken);
+            socket.offAny();
         };
     }, [socket, addMessage, setUserOnlineStatus, logout]);
 };
