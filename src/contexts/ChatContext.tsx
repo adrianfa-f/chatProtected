@@ -299,7 +299,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const addMessage = useCallback(async (message: Message) => {
         if (!user || !privateKey) return;
 
-        // Ignorar mensajes propios
+        // Ignorar mensajes propios reenviados por socket
         if (message.senderId === user.id) {
             console.log('[ChatContext] Ignorando mensaje propio');
             return;
@@ -313,20 +313,17 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             const plaintext = await decryptMessage(message.ciphertext, privateKey);
             processedMessage = { ...message, plaintext };
         } catch (error) {
-            console.error(error)
+            console.error('[ChatContext] Error al descifrar mensaje:', error);
             processedMessage = { ...message, plaintext: '❌ Error al descifrar' };
         }
 
-        // GUARDAR SIEMPRE EN LOCALSTORAGE (sin depender de activeChat)
-        const cachedMessages = loadMessagesFromLocalStorage(processedMessage.chatId) || [];
-        const updatedMessages = [...cachedMessages, processedMessage];
-        saveMessagesToLocalStorage(processedMessage.chatId, updatedMessages);
+        // ❌ Ya no guardamos los mensajes recibidos en localStorage
+        // Esto evita duplicación en rehidratación al refrescar
 
-        // Solo actualizar estado si es el chat activo
+        // ✅ Solo actualizar estado si el chat activo coincide
         const currentActiveChat = activeChatRef.current;
         if (currentActiveChat && currentActiveChat.id === processedMessage.chatId) {
             setMessages(prev => {
-                // Evitar duplicados
                 if (prev.some(m => m.id === processedMessage.id)) return prev;
 
                 const newMessages = [...prev, processedMessage];
@@ -334,8 +331,10 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             });
         }
 
+        // ✅ Igual actualizamos el preview del último mensaje en la lista de chats
         updateChatLastMessage(processedMessage.chatId, new Date(processedMessage.createdAt));
     }, [user, privateKey, decryptMessage, updateChatLastMessage]);
+
 
     // Función para actualizar el estado de un usuario (online/offline)
     const setUserOnlineStatus = useCallback((userId: string, online: boolean, lastSeen?: Date) => {
