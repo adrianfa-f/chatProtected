@@ -302,6 +302,11 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             return;
         }
 
+        if (!message.id) {
+            message.id = `fallback_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            console.warn('[ChatContext] ⚠️ Mensaje recibido sin ID. Se asignó ID temporal:', message.id);
+        }
+
         if (message.senderId === user.id) {
             console.log('[ChatContext] Ignorando mensaje propio reenviado');
             return;
