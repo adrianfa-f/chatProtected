@@ -23,16 +23,9 @@ export const sendMessageSocket = (
     socket: Socket | null,
     message: Omit<Message, 'id' | 'createdAt'>
 ) => {
-    if (!socket || !socket.connected) {
-        console.warn('[SocketService] Intento de enviar mensaje sin socket o socket no conectado');
-        return false;
-    }
+    if (!socket || !socket.connected) return false;
 
-    console.log('[SocketService] Enviando mensaje via socket:', {
-        ...message,
-        ciphertext: message.ciphertext.substring(0, 20) + '...'
-    });
-
+    console.log('[SocketService] Enviando mensaje via socket ONLY');
     try {
         socket.emit('send-message', message);
         return true;
