@@ -307,6 +307,11 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             console.warn('[ChatContext] ⚠️ Mensaje recibido sin ID. Se asignó ID temporal:', message.id);
         }
 
+        if (!message.createdAt) {
+            message.createdAt = new Date().toISOString();
+            console.warn('[ChatContext] ⚠️ Mensaje sin createdAt. Se asignó fecha actual:', message.createdAt);
+        }
+
         if (message.senderId === user.id) {
             console.log('[ChatContext] Ignorando mensaje propio reenviado');
             return;
