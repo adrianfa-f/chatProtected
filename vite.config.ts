@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
           beautify: false
         },
         compress: {
-          drop_console: true,
+          /* drop_console: true, */
           drop_debugger: true,
           pure_funcs: ['Date.now', 'Date.parse', 'performance.now']
         }
