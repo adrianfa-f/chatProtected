@@ -204,10 +204,9 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         const publicKey = await getUserPublicKey(recipientId);
         const ciphertext = await encryptMessage(content, publicKey);
 
-        // Crear mensaje temporal con ID único
-        const tempId = `temp_${Date.now()}`;
+        // Crear mensaje temporal
         const tempMessage: Message = {
-            id: tempId,
+            id: `temp_${Date.now()}`,
             chatId,
             senderId: user.id,
             receiverId: recipientId,
@@ -216,14 +215,10 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             createdAt: new Date().toISOString()
         };
 
-        // Guardar en estado y localStorage
-        setMessages(prev => {
-            const updated = [...prev, tempMessage];
-            saveMessagesToLocalStorage(chatId, updated);
-            return sortMessagesByDate(updated);
-        });
+        // Guardar SOLO en estado (no en localStorage para mensajes ajenos)
+        setMessages(prev => [...prev, tempMessage]);
 
-        // Enviar SOLO por socket
+        // Enviar por socket
         sendMessageSocket(socket, tempMessage);
     }, [chats, user, encryptMessage, socket]);
 
@@ -240,15 +235,23 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const addMessage = useCallback(async (realMessage: Message) => {
         if (!user || !privateKey) return;
 
-        // Descifrar solo si es mensaje recibido
-        let plaintext = realMessage.plaintext;
-        if (realMessage.senderId !== user.id) {
-            try {
-                plaintext = await decryptMessage(realMessage.ciphertext, privateKey);
-            } catch (error) {
-                plaintext = '❌ Error al descifrar';
-                console.error('Error descifrando:', error);
-            }
+        // Solo procesar mensajes de otros
+        if (realMessage.senderId === user.id) {
+            // Actualizar mensaje propio con ID real
+            setMessages(prev => prev.map(msg =>
+                msg.id.startsWith('temp_') && msg.ciphertext === realMessage.ciphertext
+                    ? { ...msg, id: realMessage.id } // Mantener plaintext
+                    : msg
+            ));
+            return;
+        }
+
+        // Descifrar mensaje recibido
+        let plaintext = '❌ Error al descifrar';
+        try {
+            plaintext = await decryptMessage(realMessage.ciphertext, privateKey);
+        } catch (error) {
+            console.error('Error descifrando:', error);
         }
 
         const fullMessage = {
@@ -256,23 +259,11 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             plaintext
         };
 
-        // Actualizar estado reemplazando temporal
+        // Añadir al estado SIN guardar en localStorage
         setMessages(prev => {
-            // Buscar y reemplazar mensaje temporal
-            const updated = prev.map(msg =>
-                msg.id === `temp_${realMessage.createdAt}` || // Relación temporal
-                    msg.ciphertext === realMessage.ciphertext ?  // O por contenido
-                    fullMessage : msg
-            );
-
-            // Si no estaba el temporal, añadir nuevo
-            if (!updated.some(msg => msg.id === fullMessage.id)) {
-                updated.push(fullMessage);
-            }
-
-            const sorted = sortMessagesByDate(updated);
-            saveMessagesToLocalStorage(fullMessage.chatId, sorted);
-            return sorted;
+            // Evitar duplicados
+            if (prev.some(m => m.id === fullMessage.id)) return prev;
+            return sortMessagesByDate([...prev, fullMessage]);
         });
 
         // Actualizar última actividad del chat
