@@ -204,10 +204,9 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         // Guardar en el estado
         setMessages(prev => [...prev, tempMessage]);
 
-        const existingMyMessages = loadMyMessagesFromLocalStorage(chatId) || [];
-        const updatedMyMessages = [...existingMyMessages, tempMessage];
-        saveMyMessagesToLocalStorage(chatId, updatedMyMessages);
-
+        const key = `chat_${chatId}_messages`;
+        const existingMessages = JSON.parse(localStorage.getItem(key) || '[]');
+        localStorage.setItem(key, JSON.stringify([...existingMessages, tempMessage]));
         // Enviar por socket
         sendMessageSocket(socket, tempMessage);
     }, [chats, user, encryptMessage, socket]);
