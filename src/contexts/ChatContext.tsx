@@ -7,14 +7,17 @@ import { getUserPublicKey } from '../services/userService';
 import { useSocket } from './SocketContext';
 import { sendMessageSocket } from '../services/socketService';
 
-
 // Funciones para localStorage
-const saveMessagesToLocalStorage = (chatId: string, messages: Message[]) => {
+const saveMyMessagesToLocalStorage = (chatId: string, messages: Message[]) => {
     const key = `chat_${chatId}_messages`;
-    localStorage.setItem(key, JSON.stringify(messages));
+
+    // Filtrar solo mensajes propios
+    const myMessages = messages.filter(msg => msg.senderId === (localStorage.getItem('userId') || ''));
+
+    localStorage.setItem(key, JSON.stringify(myMessages));
 };
 
-const loadMessagesFromLocalStorage = (chatId: string): Message[] | null => {
+const loadMyMessagesFromLocalStorage = (chatId: string): Message[] | null => {
     const key = `chat_${chatId}_messages`;
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : null;
@@ -41,7 +44,7 @@ const respondToRequestService = async (requestId: string, accepted: boolean): Pr
     const response = await api.patch(`/api/chat-requests/${requestId}`, {
         status: accepted ? 'accepted' : 'rejected'
     });
-    return response.data; // Asegurarse de devolver solo response.data
+    return response.data;
 };
 
 interface ChatContextType {
@@ -124,10 +127,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         try {
             const response = await respondToRequestService(requestId, accepted);
 
-            // 1. Extraer la solicitud actualizada de la respuesta
             const updatedRequest = response;
-
-            // 2. Actualizar estado de las solicitudes
             setChatRequests(prev => prev.map(req =>
                 req.id === requestId ? {
                     ...updatedRequest,
@@ -135,7 +135,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                 } : req
             ));
 
-            // 3. Si se aceptó, recargar chats y eliminar solicitud aceptada
             if (accepted) {
                 await loadChats();
                 setChatRequests(prev => prev.filter(req => req.id !== requestId));
@@ -149,49 +148,36 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const loadChatMessages = useCallback(async (chatId: string) => {
         if (!user || !privateKey) return;
 
-        // 1. Cargar mensajes desde localStorage
-        const cachedMessages = loadMessagesFromLocalStorage(chatId) || [];
-        setMessages(cachedMessages);
+        // 1. Cargar solo mensajes propios desde localStorage
+        const myMessages = loadMyMessagesFromLocalStorage(chatId) || [];
 
-        try {
-            // 2. Obtener mensajes del servidor
-            const response = await getMessages(chatId);
-            const serverMessages = response;
+        // 2. Obtener todos los mensajes del backend
+        const serverMessages = await getMessages(chatId);
 
-            // 3. Procesar solo mensajes nuevos (no en caché)
-            const newMessages = serverMessages.filter(serverMsg =>
-                !cachedMessages.some(cachedMsg => cachedMsg.id === serverMsg.id)
-            );
+        // 3. Procesar mensajes
+        const processedMessages = await Promise.all(
+            serverMessages.map(async (msg: Message) => {
+                // Mensajes propios: usar texto plano de localStorage si está disponible
+                if (msg.senderId === user.id) {
+                    const localMessage = myMessages.find(m => m.ciphertext === msg.ciphertext);
+                    return localMessage || msg;
+                }
 
-            const processedNewMessages = await Promise.all(
-                newMessages.map(async (msg: Message) => {
-                    // Mensajes propios: dejar plaintext como está
-                    if (msg.senderId === user.id) {
-                        return msg;
-                    }
+                // Mensajes recibidos: descifrar
+                try {
+                    const plaintext = await decryptMessage(msg.ciphertext, privateKey);
+                    return { ...msg, plaintext };
+                } catch (error) {
+                    console.error('Error decrypting message', error);
+                    return { ...msg, plaintext: 'No se pudo descifrar el mensaje' };
+                }
+            })
+        );
 
-                    // Mensajes recibidos: descifrar
-                    try {
-                        const plaintext = await decryptMessage(msg.ciphertext, privateKey);
-                        return { ...msg, plaintext };
-                    } catch (error) {
-                        console.error('Error decrypting message', error);
-                        return { ...msg, plaintext: 'No se pudo descifrar el mensaje' };
-                    }
-                })
-            );
+        // 4. Ordenar y establecer en estado
+        const sortedMessages = sortMessagesByDate(processedMessages);
+        setMessages(sortedMessages);
 
-            // 4. Combinar con caché
-            const allMessages = [...cachedMessages, ...processedNewMessages];
-
-            // 5. Ordenar y guardar
-            const sortedMessages = sortMessagesByDate(allMessages);
-            setMessages(sortedMessages);
-            saveMessagesToLocalStorage(chatId, sortedMessages);
-
-        } catch (error) {
-            console.error('Error loading messages:', error);
-        }
     }, [user, privateKey, decryptMessage]);
 
     const sendMessage = useCallback(async (chatId: string, content: string) => {
@@ -215,7 +201,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             createdAt: new Date().toISOString()
         };
 
-        // Guardar SOLO en estado (no en localStorage para mensajes ajenos)
+        // Guardar solo en estado (no en localStorage todavía)
         setMessages(prev => [...prev, tempMessage]);
 
         // Enviar por socket
@@ -232,46 +218,45 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     // Función para agregar un mensaje recibido por WebSocket
-    const addMessage = useCallback(async (realMessage: Message) => {
+    const addMessage = useCallback(async (message: Message) => {
         if (!user || !privateKey) return;
 
-        // Solo procesar mensajes de otros
-        if (realMessage.senderId === user.id) {
-            // Actualizar mensaje propio con ID real
-            setMessages(prev => prev.map(msg =>
-                msg.id.startsWith('temp_') && msg.ciphertext === realMessage.ciphertext
-                    ? { ...msg, id: realMessage.id } // Mantener plaintext
-                    : msg
-            ));
+        // Mensajes propios: actualizar con ID real y guardar en localStorage
+        if (message.senderId === user.id) {
+            // Actualizar mensaje con ID real
+            setMessages(prev => {
+                const updated = prev.map(msg =>
+                    msg.id.startsWith('temp_') && msg.ciphertext === message.ciphertext
+                        ? { ...message, plaintext: msg.plaintext }  // Mantener texto plano
+                        : msg
+                );
+
+                // Guardar solo mensajes propios en localStorage
+                saveMyMessagesToLocalStorage(message.chatId, updated);
+
+                return updated;
+            });
             return;
         }
 
-        // Descifrar mensaje recibido
-        let plaintext = '❌ Error al descifrar';
+        // Mensajes recibidos: descifrar y agregar al estado
         try {
-            plaintext = await decryptMessage(realMessage.ciphertext, privateKey);
+            const plaintext = await decryptMessage(message.ciphertext, privateKey);
+            const fullMessage = { ...message, plaintext };
+
+            // Solo agregar al estado (no guardar en localStorage)
+            setMessages(prev => {
+                // Evitar duplicados
+                if (prev.some(m => m.id === fullMessage.id)) return prev;
+                return sortMessagesByDate([...prev, fullMessage]);
+            });
+
+            // Actualizar última actividad del chat
+            updateChatLastMessage(fullMessage.chatId, new Date(fullMessage.createdAt));
         } catch (error) {
-            console.error('Error descifrando:', error);
+            console.error('Error processing received message:', error);
         }
-
-        const fullMessage = {
-            ...realMessage,
-            plaintext
-        };
-
-        // Añadir al estado SIN guardar en localStorage
-        setMessages(prev => {
-            // Evitar duplicados
-            if (prev.some(m => m.id === fullMessage.id)) return prev;
-            return sortMessagesByDate([...prev, fullMessage]);
-        });
-
-        // Actualizar última actividad del chat
-        updateChatLastMessage(fullMessage.chatId, new Date(fullMessage.createdAt));
     }, [user, privateKey, updateChatLastMessage, decryptMessage]);
-
-
-
 
     // Función para actualizar el estado de un usuario (online/offline)
     const setUserOnlineStatus = useCallback((userId: string, online: boolean, lastSeen?: Date) => {
@@ -301,8 +286,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         );
     }, []);
 
-
-
     return (
         <ChatContext.Provider value={{
             chats,
@@ -317,7 +300,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             loadChats,
             loadChatRequests,
             addChatRequest,
-            // Nuevas funciones para WebSocket
             addMessage,
             setUserOnlineStatus,
             updateChatLastMessage
