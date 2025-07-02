@@ -197,12 +197,16 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             senderId: user.id,
             receiverId: recipientId,
             ciphertext,
-            plaintext: content,
+            plaintext: content, // Texto plano
             createdAt: new Date().toISOString()
         };
 
-        // Guardar solo en estado (no en localStorage todavía)
+        // Guardar en el estado
         setMessages(prev => [...prev, tempMessage]);
+
+        const existingMyMessages = loadMyMessagesFromLocalStorage(chatId) || [];
+        const updatedMyMessages = [...existingMyMessages, tempMessage];
+        saveMyMessagesToLocalStorage(chatId, updatedMyMessages);
 
         // Enviar por socket
         sendMessageSocket(socket, tempMessage);
