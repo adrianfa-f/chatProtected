@@ -19,6 +19,13 @@ export const leaveChat = (socket: Socket | null, chatId: string) => {
     socket.emit('leave-chat', chatId);
 };
 
+export const sendChatRequestSocket = (socket: Socket | null, toUserId: string) => {
+    if (!socket?.connected) return false;
+    socket.emit('send-chat-request', toUserId);
+    return true;
+};
+
+
 export const sendMessageSocket = (
     socket: Socket | null,
     message: Omit<Message, 'id'>

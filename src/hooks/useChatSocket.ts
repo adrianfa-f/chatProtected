@@ -1,16 +1,20 @@
 import { useEffect } from 'react';
 import { useSocket } from '../contexts/SocketContext';
 import { useChat } from '../contexts/ChatContext';
-import type { Message } from '../types/types';
+import type { ChatRequest, Message } from '../types/types';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useChatSocket = () => {
     const socket = useSocket();
-    const { addMessage, setUserOnlineStatus } = useChat();
+    const { addMessage, setUserOnlineStatus, addChatRequest } = useChat();
     const { logout, user } = useAuth();
 
     useEffect(() => {
         if (!socket) return;
+
+        const handleNewRequest = (request: ChatRequest) => {
+            addChatRequest(request);
+        };
 
         const handleReceiveMessage = (message: Message) => {
             if (!socket?.connected || !user) return;
@@ -51,6 +55,7 @@ export const useChatSocket = () => {
         socket.on('error', handleError);
         socket.on('authenticated', handleAuthenticated);
         socket.on('invalid-token', handleInvalidToken);
+        socket.on('receive-chat-request', handleNewRequest);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -65,7 +70,8 @@ export const useChatSocket = () => {
             socket.off('error', handleError);
             socket.off('authenticated', handleAuthenticated);
             socket.off('invalid-token', handleInvalidToken);
+            socket.off('receive-chat-request', handleNewRequest);
             socket.offAny();
         };
-    }, [socket, addMessage, setUserOnlineStatus, logout, user]);
+    }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest]);
 };

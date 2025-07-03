@@ -4,6 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { searchUsers, sendChatRequest } from '../../services/chatService';
 import type { ChatRequest, User } from '../../types/types';
 import { FaSearch, FaTimes } from 'react-icons/fa';
+import { useSocket } from '../../contexts/SocketContext';
+import { sendChatRequestSocket } from '../../services/socketService';
 
 const StartNewChatModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -12,8 +14,18 @@ const StartNewChatModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     const [error, setError] = useState('');
     const { addChatRequest } = useChat();
     const { user } = useAuth();
+    const socket = useSocket();
 
     const handleSearch = async () => {
+        if (!user) {
+            setError('No se pudo identificar tu usuario');
+            return;
+        }
+        if (!socket?.connected) {
+            setError('Socket no conectado');
+            return;
+        }
+
         if (!searchTerm.trim()) return;
         setIsSearching(true);
         setError('');
@@ -37,6 +49,7 @@ const StartNewChatModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
         try {
             const newRequest = await sendChatRequest(userToChat.id);
+            sendChatRequestSocket(socket, userToChat.id);
             const requestForState: ChatRequest = {
                 ...newRequest,
                 fromUser: user,
