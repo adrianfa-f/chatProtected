@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { searchUsers, sendChatRequest } from '../../services/chatService';
-import type { ChatRequest, User } from '../../types/types';
+import { searchUsers } from '../../services/chatService';
+import type { User } from '../../types/types';
 import { FaSearch, FaTimes } from 'react-icons/fa';
 import { useSocket } from '../../contexts/SocketContext';
 import { sendChatRequestSocket } from '../../services/socketService';
@@ -12,7 +11,6 @@ const StartNewChatModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     const [searchResults, setSearchResults] = useState<User[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [error, setError] = useState('');
-    const { addChatRequest } = useChat();
     const { user } = useAuth();
     const socket = useSocket();
 
@@ -48,15 +46,7 @@ const StartNewChatModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         }
 
         try {
-            const newRequest = await sendChatRequest(userToChat.id);
             sendChatRequestSocket(socket, userToChat.id);
-            const requestForState: ChatRequest = {
-                ...newRequest,
-                fromUser: user,
-                toUser: userToChat
-            };
-
-            addChatRequest(requestForState);
             onClose();
         } catch (error) {
             console.error('Error sending chat request:', error);
