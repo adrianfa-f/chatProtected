@@ -12,7 +12,6 @@ const ChatList = ({
     onSelectChat,
     user
 }: ChatListProps) => {
-    console.log("Chats: ", chats)
     // Función para formatear la fecha según las especificaciones
     const formatChatDate = (date: Date): string => {
         const now = new Date();
@@ -58,6 +57,8 @@ const ChatList = ({
     return (
         <div className="space-y-2 px-1">
             {chats.map(chat => {
+                console.log("Chats: ", chat)
+                console.log("Count of each chat", chat.unreadCount)
                 const otherUser = chat.user1.id === user.id ? chat.user2 : chat.user1;
                 const isOnline = otherUser.online; // Usar el estado en línea real
 
