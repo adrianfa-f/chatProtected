@@ -131,6 +131,13 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                 // Mensajes propios: usar texto plano de localStorage si está disponible
                 if (msg.senderId === user.id) {
                     const localMessage = myMessages.find(m => m.ciphertext === msg.ciphertext);
+                    if (localMessage) {
+                        // Si el estado es diferente, actualízalo
+                        if (msg.status && localMessage.status !== msg.status) {
+                            return { ...localMessage, status: msg.status };
+                        }
+                        return localMessage;
+                    }
                     return localMessage || msg;
                 }
 
@@ -148,6 +155,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         // 4. Ordenar y establecer en estado
         const sortedMessages = sortMessagesByDate(processedMessages);
         setMessages(sortedMessages);
+        saveMyMessagesToLocalStorage(chatId, sortedMessages);
 
     }, [user, privateKey, decryptMessage]);
 
@@ -169,7 +177,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             receiverId: recipientId,
             ciphertext,
             plaintext: content, // Texto plano
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            status: 'delivered'
         };
 
         // Guardar en el estado
