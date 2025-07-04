@@ -31,6 +31,7 @@ export const encryptMessage = async (message: string, publicKey: string) => {
 };
 
 export const decryptMessage = async (ciphertext: string, privateKey: string) => {
+    console.log("eSTOY DESENCRIPTANDO EL MENSAJE")
     await initializeSodium();
     const ciphertextBytes = libsodium.from_base64(ciphertext);
     const privateKeyBytes = libsodium.from_base64(privateKey);
@@ -40,5 +41,6 @@ export const decryptMessage = async (ciphertext: string, privateKey: string) => 
         publicKeyBytes,
         privateKeyBytes
     );
+    console.log("mensaje desencriptado: ", decrypted)
     return libsodium.to_string(decrypted);
 };

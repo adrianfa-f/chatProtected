@@ -43,6 +43,8 @@ const ChatList = ({ chats, onSelectChat, user }: ChatListProps) => {
                             if (local) lastMessageContent = local;
                         } else if (privateKey) {
                             try {
+                                console.log("ultimo mensaje cifrado: ", chat.lastMessage)
+                                console.log("clave privada: ", privateKey)
                                 lastMessageContent = await decryptMessage(chat.lastMessage, privateKey);
                             } catch {
                                 lastMessageContent = '🔒 Mensaje cifrado';
