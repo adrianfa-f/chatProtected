@@ -6,7 +6,7 @@ export interface User {
     lastSeen?: Date;  // Nuevo campo para la última vez visto
 }
 
-export type MessageStatus = 'sending' | 'sent' | 'failed' | 'delivered';
+export type MessageStatus = 'seen' | 'delivered';
 
 export interface Message {
     id: string;
