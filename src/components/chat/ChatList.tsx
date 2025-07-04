@@ -57,8 +57,6 @@ const ChatList = ({
     return (
         <div className="space-y-2 px-1">
             {chats.map(chat => {
-                console.log("Chats: ", chat)
-                console.log("Count of each chat", chat.unreadCount)
                 const otherUser = chat.user1.id === user.id ? chat.user2 : chat.user1;
                 const isOnline = otherUser.online; // Usar el estado en línea real
 
