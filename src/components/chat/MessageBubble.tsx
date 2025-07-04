@@ -8,6 +8,7 @@ interface MessageBubbleProps {
 
 const MessageBubble = ({ message, isOwn }: MessageBubbleProps) => {
     // Formatear la hora del mensaje
+    console.log("Estatus del mensaje: ", message.status)
     const messageTime = new Date(message.createdAt).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
