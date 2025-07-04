@@ -21,6 +21,17 @@ export const loadMessagesFromLocalStorage = (chatId: string): Message[] | null =
     return messages;
 };
 
+export const getLastOwnMessage = (chatId: string): string | null => {
+    const messages = loadMessagesFromLocalStorage(chatId);
+    if (!messages || messages.length === 0) return null;
+
+    // Buscar el último mensaje propio con texto plano
+    const ownMessages = messages.filter(msg => msg.senderId && msg.plaintext);
+    const sorted = sortMessagesByDate(ownMessages);
+    const last = sorted[sorted.length - 1];
+    return last?.plaintext || null;
+};
+
 export const sortMessagesByDate = (messages: Message[]): Message[] => {
     return [...messages].sort((a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()

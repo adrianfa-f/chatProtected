@@ -26,6 +26,7 @@ export interface Chat {
     user2: User;
     updatedAt: string | Date;
     lastMessage?: string;
+    lastSenderId?: string;
     unreadCount?: number;
 }
 
