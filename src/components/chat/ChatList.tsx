@@ -12,6 +12,7 @@ const ChatList = ({
     onSelectChat,
     user
 }: ChatListProps) => {
+    console.log("Chats: ", chats)
     // Función para formatear la fecha según las especificaciones
     const formatChatDate = (date: Date): string => {
         const now = new Date();
