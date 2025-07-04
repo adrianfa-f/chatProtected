@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 export const useChatSocket = () => {
     const socket = useSocket();
-    const { addMessage, setUserOnlineStatus, addChatRequest } = useChat();
+    const { addMessage, setUserOnlineStatus, addChatRequest, loadChats, setChatRequests } = useChat();
     const { logout, user } = useAuth();
 
     useEffect(() => {
@@ -14,6 +14,18 @@ export const useChatSocket = () => {
 
         const handleNewRequest = (request: ChatRequest) => {
             addChatRequest(request);
+        };
+
+        const handleNewChatCreated = () => {
+            console.log('[Socket] Nuevo chat creado, recargando lista de chats');
+            loadChats();
+        };
+
+        const handleChatRejected = (requestId: string) => {
+            console.log('[Socket] Solicitud rechazada:', requestId);
+            setChatRequests(prev => prev.map(req =>
+                req.id === requestId ? { ...req, status: 'rejected' } : req
+            ));
         };
 
         const handleReceiveMessage = (message: Message) => {
@@ -56,6 +68,8 @@ export const useChatSocket = () => {
         socket.on('authenticated', handleAuthenticated);
         socket.on('invalid-token', handleInvalidToken);
         socket.on('receive-chat-request', handleNewRequest);
+        socket.on('new-chat-created', handleNewChatCreated);
+        socket.on('chat-request-rejected', handleChatRejected);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -71,7 +85,9 @@ export const useChatSocket = () => {
             socket.off('authenticated', handleAuthenticated);
             socket.off('invalid-token', handleInvalidToken);
             socket.off('receive-chat-request', handleNewRequest);
+            socket.off('new-chat-created', handleNewChatCreated);
+            socket.off('chat-request-rejected', handleChatRejected);
             socket.offAny();
         };
-    }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest]);
+    }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest, loadChats, setChatRequests]);
 };

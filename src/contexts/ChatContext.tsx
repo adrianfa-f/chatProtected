@@ -40,13 +40,6 @@ const getChatRequests = async (): Promise<ChatRequest[]> => {
     return response.data;
 };
 
-const respondToRequestService = async (requestId: string, accepted: boolean): Promise<ChatRequest> => {
-    const response = await api.patch(`/api/chat-requests/${requestId}`, {
-        status: accepted ? 'accepted' : 'rejected'
-    });
-    return response.data;
-};
-
 interface ChatContextType {
     chats: Chat[];
     activeChat: Chat | null;
@@ -54,7 +47,6 @@ interface ChatContextType {
     messages: Message[];
     chatRequests: ChatRequest[];
     searchAndRequestUser: (query: string) => Promise<User[]>;
-    respondToRequest: (requestId: string, accepted: boolean) => Promise<void>;
     loadChatMessages: (chatId: string) => Promise<void>;
     sendMessage: (chatId: string, content: string) => Promise<void>;
     loadChats: () => Promise<void>;
@@ -64,6 +56,7 @@ interface ChatContextType {
     addMessage: (message: Message) => void;
     setUserOnlineStatus: (userId: string, online: boolean, lastSeen?: Date) => void;
     updateChatLastMessage: (chatId: string, timestamp: Date) => void;
+    setChatRequests: React.Dispatch<React.SetStateAction<ChatRequest[]>>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -122,28 +115,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             return [];
         }
     }, []);
-
-    const respondToRequest = useCallback(async (requestId: string, accepted: boolean) => {
-        try {
-            const response = await respondToRequestService(requestId, accepted);
-
-            const updatedRequest = response;
-            setChatRequests(prev => prev.map(req =>
-                req.id === requestId ? {
-                    ...updatedRequest,
-                    status: updatedRequest.status as 'pending' | 'accepted' | 'rejected'
-                } : req
-            ));
-
-            if (accepted) {
-                await loadChats();
-                setChatRequests(prev => prev.filter(req => req.id !== requestId));
-            }
-        } catch (error) {
-            console.error('Error responding to chat request:', error);
-            throw error;
-        }
-    }, [loadChats]);
 
     const loadChatMessages = useCallback(async (chatId: string) => {
         if (!user || !privateKey) return;
@@ -297,7 +268,6 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             messages,
             chatRequests,
             searchAndRequestUser,
-            respondToRequest,
             loadChatMessages,
             sendMessage,
             loadChats,
@@ -305,7 +275,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             addChatRequest,
             addMessage,
             setUserOnlineStatus,
-            updateChatLastMessage
+            updateChatLastMessage,
+            setChatRequests
         }}>
             {children}
         </ChatContext.Provider>

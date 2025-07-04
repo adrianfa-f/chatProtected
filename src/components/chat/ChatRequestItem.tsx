@@ -1,6 +1,6 @@
-import { useChat } from '../../contexts/ChatContext';
 import { FaUser } from 'react-icons/fa';
 import type { ChatRequest } from '../../types/types';
+import { useSocket } from "../../contexts/SocketContext"
 
 interface ChatRequestItemProps {
     request: ChatRequest;
@@ -11,11 +11,21 @@ const ChatRequestItem = ({
     request,
     currentUserId
 }: ChatRequestItemProps) => {
-    const { respondToRequest } = useChat();
+    const socket = useSocket()
 
     // Determinar si es una solicitud recibida
     const isReceived = request.toUser.id === currentUserId;
     const otherUser = isReceived ? request.fromUser : request.toUser;
+
+    const handleAccept = () => {
+        if (!socket?.connected) return;
+        socket.emit('accept-chat-request', request.id);
+    };
+
+    const handleReject = () => {
+        if (!socket?.connected) return;
+        socket.emit('reject-chat-request', request.id);
+    };
 
     return (
         <div className="p-4 flex items-center">
@@ -36,13 +46,13 @@ const ChatRequestItem = ({
                 {isReceived && request.status === 'pending' ? (
                     <div className="flex space-x-2">
                         <button
-                            onClick={() => respondToRequest(request.id, true)}
+                            onClick={handleAccept}
                             className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
                         >
                             Aceptar
                         </button>
                         <button
-                            onClick={() => respondToRequest(request.id, false)}
+                            onClick={handleReject}
                             className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors"
                         >
                             Rechazar
