@@ -34,8 +34,11 @@ export const decryptMessage = async (ciphertext: string, privateKey: string) => 
     console.log("eSTOY DESENCRIPTANDO EL MENSAJE")
     await initializeSodium();
     const ciphertextBytes = libsodium.from_base64(ciphertext);
+    console.log("texto cifrado en bytes ", ciphertextBytes)
     const privateKeyBytes = libsodium.from_base64(privateKey);
+    console.log("clave privada en bytes ", privateKeyBytes)
     const publicKeyBytes = libsodium.crypto_scalarmult_base(privateKeyBytes);
+    console.log("Clave privada en bytes 2", publicKeyBytes)
     const decrypted = libsodium.crypto_box_seal_open(
         ciphertextBytes,
         publicKeyBytes,
