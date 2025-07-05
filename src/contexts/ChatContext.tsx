@@ -121,44 +121,54 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const loadChatMessages = useCallback(async (chatId: string) => {
         if (!user || !privateKey) return;
 
-        // 1. Cargar solo mensajes propios desde localStorage
+        // 1. Cargar tus propios mensajes desde localStorage
         const myMessages = loadMyMessagesFromLocalStorage(chatId) || [];
 
-        // 2. Obtener todos los mensajes del backend
+        // 2. Obtener todos los mensajes del servidor
         const serverMessages = await getMessages(chatId);
 
-        // 3. Procesar mensajes
+        // 3. Procesar los mensajes del servidor
         const processedMessages = await Promise.all(
             serverMessages.map(async (msg: Message) => {
-                // Mensajes propios: usar texto plano de localStorage si está disponible
+                // Si el mensaje es tuyo, y lo tienes en local, usa la versión local
                 if (msg.senderId === user.id) {
                     const localMessage = myMessages.find(m => m.ciphertext === msg.ciphertext);
                     if (localMessage) {
-                        // Si el estado es diferente, actualízalo
-                        if (msg.status && localMessage.status !== msg.status) {
-                            return { ...localMessage, status: msg.status };
-                        }
-                        return localMessage;
+                        return {
+                            ...localMessage,
+                            status: msg.status || localMessage.status
+                        };
                     }
-                    return localMessage || msg;
+                    return msg; // Si no está en local, se devuelve tal cual
                 }
 
-                // Mensajes recibidos: descifrar
+                // Si el mensaje fue recibido, lo desencriptamos
                 try {
                     const plaintext = await decryptMessage(msg.ciphertext, privateKey);
                     return { ...msg, plaintext };
                 } catch (error) {
-                    console.error('Error decrypting message', error);
+                    console.error('Error decrypting message:', error);
                     return { ...msg, plaintext: 'No se pudo descifrar el mensaje' };
                 }
             })
         );
 
-        // 4. Ordenar y establecer en estado
+        // 4. Ordenar los mensajes por fecha
         const sortedMessages = sortMessagesByDate(processedMessages);
         setMessages(sortedMessages);
-        saveMyMessagesToLocalStorage(chatId, sortedMessages);
 
+        // 5. Actualizar solo tus mensajes en localStorage si el estado cambió
+        const updatedLocalMessages = myMessages.map(local => {
+            const matchingServer = serverMessages.find(
+                s => s.senderId === user.id && s.ciphertext === local.ciphertext
+            );
+            if (matchingServer && matchingServer.status && local.status !== matchingServer.status) {
+                return { ...local, status: matchingServer.status };
+            }
+            return local;
+        });
+
+        saveMyMessagesToLocalStorage(chatId, updatedLocalMessages);
     }, [user, privateKey, decryptMessage]);
 
     const sendMessage = useCallback(async (chatId: string, content: string) => {
