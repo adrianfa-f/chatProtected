@@ -32,7 +32,6 @@ const sortMessagesByDate = (messages: Message[]): Message[] => {
 // Servicios necesarios
 const getMessages = async (chatId: string): Promise<Message[]> => {
     const response = await api.get(`/api/messages/${chatId}`);
-    console.log("Respuesta a la peticion de chat: ", response)
     return response.data.data;
 };
 
@@ -80,6 +79,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const loadChats = useCallback(async () => {
         try {
             const response = await api.get('/api/chats/');
+            console.log("Respuesta de tus chats: ", response)
             setChats(response.data.data);
         } catch (error) {
             console.error('Error loading chats:', error);
