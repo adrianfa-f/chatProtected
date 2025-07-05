@@ -35,6 +35,7 @@ const ChatList = ({ chats, onSelectChat, user }: ChatListProps) => {
         const preprocessChats = async () => {
             const updated = await Promise.all(
                 chats.map(async (chat): Promise<ProcessedChat> => {
+                    console.log("CHat props: ", chat)
                     let lastMessageContent = chat.lastMessage;
 
                     if (chat.lastMessage) {
