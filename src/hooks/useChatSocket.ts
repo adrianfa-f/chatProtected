@@ -28,6 +28,11 @@ export const useChatSocket = () => {
             ));
         };
 
+        const handleChatAccepted = () => {
+            console.log('[Socket] Chat aceptado por este usuario, recargando lista');
+            loadChats(); // 👈 recarga visualmente
+        };
+
         const handleReceiveMessage = (message: Message) => {
             if (!socket?.connected || !user) return;
             if (message.senderId === user.id) {
@@ -70,6 +75,7 @@ export const useChatSocket = () => {
         socket.on('receive-chat-request', handleNewRequest);
         socket.on('new-chat-created', handleNewChatCreated);
         socket.on('chat-request-rejected', handleChatRejected);
+        socket.on('chat-accepted', handleChatAccepted);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -87,6 +93,7 @@ export const useChatSocket = () => {
             socket.off('receive-chat-request', handleNewRequest);
             socket.off('new-chat-created', handleNewChatCreated);
             socket.off('chat-request-rejected', handleChatRejected);
+            socket.off('chat-accepted', handleChatAccepted);
             socket.offAny();
         };
     }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest, loadChats, setChatRequests]);
