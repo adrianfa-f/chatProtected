@@ -1,4 +1,4 @@
-import { FaCheckDouble } from 'react-icons/fa';
+import { FaCheck, FaCheckDouble } from 'react-icons/fa';
 import type { Message } from '../../types/types';
 
 interface MessageBubbleProps {
@@ -29,8 +29,8 @@ const MessageBubble = ({ message, isOwn }: MessageBubbleProps) => {
                     <span className="mr-1">{messageTime}</span>
                     {isOwn && (
                         message.status === 'seen'
-                            ? <FaCheckDouble className="text-purple-200" />
-                            : <FaCheckDouble className="text-gray-300" />
+                            ? <FaCheckDouble className="text-gray-300" />
+                            : <FaCheck className="text-gray-300" />
                     )}
                 </div>
             </div>
