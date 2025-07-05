@@ -32,6 +32,7 @@ const sortMessagesByDate = (messages: Message[]): Message[] => {
 // Servicios necesarios
 const getMessages = async (chatId: string): Promise<Message[]> => {
     const response = await api.get(`/api/messages/${chatId}`);
+    console.log("Respuesta a la peticion de chat: ", response)
     return response.data.data;
 };
 
