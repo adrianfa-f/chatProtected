@@ -50,8 +50,6 @@ export const useChatSocket = () => {
         }) => {
             const { chatId, senderId, ciphertext } = data;
 
-            console.log("Se actualizo el estado del Chat.")
-
             setChats(prevChats =>
                 prevChats.map(chat =>
                     chat.id === chatId
