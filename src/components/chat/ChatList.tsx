@@ -38,13 +38,12 @@ const ChatList = ({ chats, onSelectChat, user }: ChatListProps) => {
                     let lastMessageContent = chat.lastMessage;
 
                     if (chat.lastMessage) {
+                        console.log("El id del que envia: ", chat.lastSenderId)
                         if (chat.lastSenderId === user?.id) {
                             const local = getLastOwnMessage(chat.id);
                             if (local) lastMessageContent = local;
                         } else if (privateKey) {
                             try {
-                                console.log("ultimo mensaje cifrado: ", chat.lastMessage)
-                                console.log("clave privada: ", privateKey)
                                 lastMessageContent = await decryptMessage(chat.lastMessage, privateKey);
                             } catch {
                                 lastMessageContent = '🔒 Mensaje cifrado';
