@@ -42,6 +42,7 @@ const getChatRequests = async (): Promise<ChatRequest[]> => {
 
 interface ChatContextType {
     chats: Chat[];
+    setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
     activeChat: Chat | null;
     setActiveChat: (chat: Chat | null) => void;
     messages: Message[];
@@ -273,6 +274,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     return (
         <ChatContext.Provider value={{
             chats,
+            setChats,
             activeChat,
             setActiveChat,
             messages,

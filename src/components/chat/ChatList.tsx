@@ -35,11 +35,9 @@ const ChatList = ({ chats, onSelectChat, user }: ChatListProps) => {
         const preprocessChats = async () => {
             const updated = await Promise.all(
                 chats.map(async (chat): Promise<ProcessedChat> => {
-                    console.log("CHat props: ", chat)
                     let lastMessageContent = chat.lastMessage;
 
                     if (chat.lastMessage) {
-                        console.log("El id del que envia: ", chat.lastSenderId)
                         if (chat.lastSenderId === user?.id) {
                             const local = getLastOwnMessage(chat.id);
                             if (local) lastMessageContent = local;

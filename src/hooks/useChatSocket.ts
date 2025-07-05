@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 export const useChatSocket = () => {
     const socket = useSocket();
-    const { addMessage, setUserOnlineStatus, addChatRequest, loadChats, setChatRequests } = useChat();
+    const { addMessage, setUserOnlineStatus, addChatRequest, loadChats, setChatRequests, setChats } = useChat();
     const { logout, user } = useAuth();
 
     useEffect(() => {
@@ -43,6 +43,32 @@ export const useChatSocket = () => {
             addMessage(message);
         };
 
+        const handleChatMessageSummary = (data: {
+            chatId: string;
+            senderId: string;
+            ciphertext: string;
+        }) => {
+            const { chatId, senderId, ciphertext } = data;
+
+            console.log("Se actualizo el estado del Chat.")
+
+            setChats(prevChats =>
+                prevChats.map(chat =>
+                    chat.id === chatId
+                        ? {
+                            ...chat,
+                            lastMessage: ciphertext,
+                            lastSenderId: senderId,
+                            unreadCount:
+                                senderId !== user?.id
+                                    ? (chat.unreadCount || 0) + 1
+                                    : chat.unreadCount || 0
+                        }
+                        : chat
+                )
+            );
+        };
+
         const handleUserStatus = (data: {
             userId: string;
             online: boolean;
@@ -76,6 +102,7 @@ export const useChatSocket = () => {
         socket.on('new-chat-created', handleNewChatCreated);
         socket.on('chat-request-rejected', handleChatRejected);
         socket.on('chat-accepted', handleChatAccepted);
+        socket.on('chat-message-summary', handleChatMessageSummary);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -94,7 +121,8 @@ export const useChatSocket = () => {
             socket.off('new-chat-created', handleNewChatCreated);
             socket.off('chat-request-rejected', handleChatRejected);
             socket.off('chat-accepted', handleChatAccepted);
+            socket.off('chat-message-summary', handleChatMessageSummary);
             socket.offAny();
         };
-    }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest, loadChats, setChatRequests]);
+    }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest, loadChats, setChatRequests, setChats]);
 };

@@ -15,14 +15,17 @@ const StartNewChatModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     const socket = useSocket();
 
     const handleSearch = async () => {
+        if (searchTerm.trim() === user?.username) return;
+
         if (!user) {
             setError('No se pudo identificar tu usuario');
             return;
-        }
+        };
+
         if (!socket?.connected) {
             setError('Socket no conectado');
             return;
-        }
+        };
 
         if (!searchTerm.trim()) return;
         setIsSearching(true);

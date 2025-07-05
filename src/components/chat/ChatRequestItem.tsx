@@ -1,6 +1,7 @@
 import { FaUser } from 'react-icons/fa';
 import type { ChatRequest } from '../../types/types';
-import { useSocket } from "../../contexts/SocketContext"
+import { useSocket } from "../../contexts/SocketContext";
+import { useChat } from "../../contexts/ChatContext"
 
 interface ChatRequestItemProps {
     request: ChatRequest;
@@ -12,6 +13,7 @@ const ChatRequestItem = ({
     currentUserId
 }: ChatRequestItemProps) => {
     const socket = useSocket()
+    const { setChatRequests } = useChat()
 
     // Determinar si es una solicitud recibida
     const isReceived = request.toUser.id === currentUserId;
@@ -20,6 +22,7 @@ const ChatRequestItem = ({
     const handleAccept = () => {
         if (!socket?.connected) return;
         socket.emit('accept-chat-request', request.id);
+        setChatRequests(prev => prev.filter(req => req.id !== request.id));
     };
 
     const handleReject = () => {
