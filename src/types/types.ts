@@ -15,7 +15,7 @@ export interface Message {
     receiverId: string; // Este campo es necesario para el envío por WebSocket
     ciphertext: string;
     plaintext?: string;
-    createdAt: Date | string;
+    createdAt: Date;
     status?: MessageStatus;
     nonce?: string; // Agregar si es necesario
 }
@@ -24,7 +24,7 @@ export interface Chat {
     id: string;
     user1: User;
     user2: User;
-    updatedAt: string | Date;
+    updatedAt: Date;
     lastMessage?: string;
     lastSenderId?: string;
     unreadCount?: number;

@@ -7,39 +7,6 @@ import { getUserPublicKey } from '../services/userService';
 import { useSocket } from './SocketContext';
 import { sendMessageSocket } from '../services/socketService';
 
-// Funciones para localStorage
-const saveMyMessagesToLocalStorage = (chatId: string, messages: Message[]) => {
-    const key = `chat_${chatId}_messages`;
-
-    // Filtrar solo mensajes propios
-    const myMessages = messages.filter(msg => msg.senderId === (localStorage.getItem('userId') || ''));
-
-    localStorage.setItem(key, JSON.stringify(myMessages));
-};
-
-const loadMyMessagesFromLocalStorage = (chatId: string): Message[] | null => {
-    const key = `chat_${chatId}_messages`;
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : null;
-};
-
-const sortMessagesByDate = (messages: Message[]): Message[] => {
-    return [...messages].sort((a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-};
-
-// Servicios necesarios
-const getMessages = async (chatId: string): Promise<Message[]> => {
-    const response = await api.get(`/api/messages/${chatId}`);
-    return response.data.data;
-};
-
-const getChatRequests = async (): Promise<ChatRequest[]> => {
-    const response = await api.get('/api/chat-requests');
-    return response.data;
-};
-
 interface ChatContextType {
     chats: Chat[];
     setChats: React.Dispatch<React.SetStateAction<Chat[]>>;
@@ -53,11 +20,11 @@ interface ChatContextType {
     loadChats: () => Promise<void>;
     loadChatRequests: () => Promise<void>;
     addChatRequest: (request: ChatRequest) => void;
-    // Nuevas funciones para WebSocket
     addMessage: (message: Message) => void;
     setUserOnlineStatus: (userId: string, online: boolean, lastSeen?: Date) => void;
     updateChatLastMessage: (chatId: string, timestamp: Date) => void;
     setChatRequests: React.Dispatch<React.SetStateAction<ChatRequest[]>>;
+    getLastMessagePreview: (chatId: string) => Promise<string>;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -68,7 +35,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [chatRequests, setChatRequests] = useState<ChatRequest[]>([]);
 
-    const { user, privateKey } = useAuth();
+    const { user, privateKey, storageService } = useAuth();
     const { encryptMessage, decryptMessage, isReady: isCryptoReady } = useCrypto();
 
     const socket = useSocket();
@@ -89,8 +56,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     const loadChatRequests = useCallback(async () => {
         try {
-            const requests = await getChatRequests();
-            setChatRequests(requests);
+            const response = await api.get('/api/chat-requests');
+            setChatRequests(response.data);
         } catch (error) {
             console.error('Error loading chat requests:', error);
         }
@@ -98,11 +65,11 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Cargar chats y solicitudes al iniciar
     useEffect(() => {
-        if (user && isCryptoReady) {
+        if (user && isCryptoReady && storageService) {
             loadChats();
             loadChatRequests();
         }
-    }, [user, isCryptoReady, loadChatRequests, loadChats]);
+    }, [user, isCryptoReady, loadChatRequests, loadChats, storageService]);
 
     const addChatRequest = useCallback((request: ChatRequest) => {
         setChatRequests(prev => [...prev, request]);
@@ -119,20 +86,20 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     const loadChatMessages = useCallback(async (chatId: string) => {
-        if (!user || !privateKey) return;
+        if (!user || !privateKey || !storageService) return;
 
         // 1. Cargar tus mensajes locales
-        const myMessages = loadMyMessagesFromLocalStorage(chatId) || [];
+        const myMessages = await storageService.loadMessages(chatId) || [];
 
         // 2. Obtener todos los mensajes del backend
-        const serverMessages = await getMessages(chatId);
+        const serverMessages = await api.get(`/api/messages/${chatId}`).then(res => res.data.data);
 
         // 3. Procesar todos los mensajes
         const processedMessages = await Promise.all(
             serverMessages.map(async (msg: Message) => {
                 // Si el mensaje es propio, usar la versión local si existe
                 if (msg.senderId === user.id) {
-                    const localMessage = myMessages.find(m => m.ciphertext === msg.ciphertext);
+                    const localMessage = myMessages.find((m: Message) => m.ciphertext === msg.ciphertext);
                     return localMessage || msg;
                 }
 
@@ -147,10 +114,10 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             })
         );
 
-        // 4. Actualizar solo el status en mensajes propios del localStorage
-        const updatedLocalMessages = myMessages.map(local => {
+        // 4. Actualizar solo el status en mensajes propios
+        const updatedLocalMessages = myMessages.map((local: Message) => {
             const match = serverMessages.find(
-                msg => msg.senderId === user.id && msg.ciphertext === local.ciphertext
+                (msg: Message) => msg.senderId === user.id && msg.ciphertext === local.ciphertext
             );
 
             if (match && match.status && local.status !== match.status) {
@@ -161,14 +128,18 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
         // 5. Establecer en estado y guardar solo los mensajes propios actualizados
-        const sortedMessages = sortMessagesByDate(processedMessages);
-        setMessages(sortedMessages);
-        localStorage.setItem(`chat_${chatId}_messages`, JSON.stringify(updatedLocalMessages));
-    }, [user, privateKey, decryptMessage]);
+        const sortedMessages = [...processedMessages].sort((a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
 
+        setMessages(sortedMessages);
+
+        // Guardar mensajes actualizados
+        await storageService.saveMessages(chatId, updatedLocalMessages);
+    }, [user, privateKey, storageService, decryptMessage]);
 
     const sendMessage = useCallback(async (chatId: string, content: string) => {
-        if (!user) return;
+        if (!user || !storageService) return;
 
         const chat = chats.find(c => c.id === chatId);
         if (!chat) return;
@@ -184,20 +155,20 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             senderId: user.id,
             receiverId: recipientId,
             ciphertext,
-            plaintext: content, // Texto plano
-            createdAt: new Date().toISOString(),
+            plaintext: content,
+            createdAt: new Date(),
             status: 'delivered'
         };
 
         // Guardar en el estado
         setMessages(prev => [...prev, tempMessage]);
 
-        const key = `chat_${chatId}_messages`;
-        const existingMessages = JSON.parse(localStorage.getItem(key) || '[]');
-        localStorage.setItem(key, JSON.stringify([...existingMessages, tempMessage]));
+        // Guardar en el almacenamiento seguro
+        await storageService.saveMessages(chatId, [tempMessage]);
+
         // Enviar por socket
         sendMessageSocket(socket, tempMessage);
-    }, [chats, user, encryptMessage, socket]);
+    }, [chats, user, encryptMessage, socket, storageService]);
 
     // Función para actualizar la última actividad de un chat
     const updateChatLastMessage = useCallback((chatId: string, timestamp: Date) => {
@@ -210,11 +181,10 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Función para agregar un mensaje recibido por WebSocket
     const addMessage = useCallback(async (message: Message) => {
-        if (!user || !privateKey) return;
+        if (!user || !privateKey || !storageService) return;
 
-        // Mensajes propios: actualizar con ID real y guardar en localStorage
+        // Mensajes propios: actualizar con ID real y guardar en storage
         if (message.senderId === user.id) {
-            // Actualizar mensaje con ID real
             setMessages(prev => {
                 const updated = prev.map(msg =>
                     msg.id.startsWith('temp_') && msg.ciphertext === message.ciphertext
@@ -222,8 +192,9 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                         : msg
                 );
 
-                // Guardar solo mensajes propios en localStorage
-                saveMyMessagesToLocalStorage(message.chatId, updated);
+                // Guardar solo mensajes propios en storage
+                const myMessages = updated.filter(msg => msg.senderId === user.id);
+                storageService.saveMessages(message.chatId, myMessages).catch(console.error);
 
                 return updated;
             });
@@ -235,11 +206,13 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             const plaintext = await decryptMessage(message.ciphertext, privateKey);
             const fullMessage = { ...message, plaintext };
 
-            // Solo agregar al estado (no guardar en localStorage)
+            // Solo agregar al estado (no guardar en storage porque no es nuestro)
             setMessages(prev => {
                 // Evitar duplicados
                 if (prev.some(m => m.id === fullMessage.id)) return prev;
-                return sortMessagesByDate([...prev, fullMessage]);
+                return [...prev, fullMessage].sort((a, b) =>
+                    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                );
             });
 
             // Actualizar última actividad del chat
@@ -247,7 +220,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         } catch (error) {
             console.error('Error processing received message:', error);
         }
-    }, [user, privateKey, updateChatLastMessage, decryptMessage]);
+    }, [user, privateKey, storageService, updateChatLastMessage, decryptMessage]);
 
     // Función para actualizar el estado de un usuario (online/offline)
     const setUserOnlineStatus = useCallback((userId: string, online: boolean, lastSeen?: Date) => {
@@ -277,6 +250,30 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         );
     }, []);
 
+    // Función para obtener el último mensaje (usada en la lista de chats)
+    const getLastMessagePreview = useCallback(async (chatId: string): Promise<string> => {
+        if (!storageService) return '';
+
+        try {
+            const lastMessage = await storageService.getLastMessage(chatId);
+            return lastMessage || '';
+        } catch (error) {
+            console.error('Error getting last message:', error);
+            return '';
+        }
+    }, [storageService]);
+
+    // Limpieza periódica de mensajes antiguos
+    /* useEffect(() => {
+        if (!storageService) return;
+
+        const cleanupInterval = setInterval(() => {
+            storageService.cleanupOldChats().catch(console.error);
+        }, 24 * 60 * 60 * 1000); // Diariamente
+
+        return () => clearInterval(cleanupInterval);
+    }, [storageService]); */
+
     return (
         <ChatContext.Provider value={{
             chats,
@@ -294,7 +291,8 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             addMessage,
             setUserOnlineStatus,
             updateChatLastMessage,
-            setChatRequests
+            setChatRequests,
+            getLastMessagePreview
         }}>
             {children}
         </ChatContext.Provider>

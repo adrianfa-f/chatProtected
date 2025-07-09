@@ -3,3 +3,4 @@ El chatList tiene que mostrar una miniatura del ultimo mensaje recibido y un cir
 Al que acepta la peticion de acceptar el chat request no se le crea el chat directamente.
 
 Mejoras
+Establecer una mecanica para que en caso de robo inhabilitar el acceso a cierto usuario.

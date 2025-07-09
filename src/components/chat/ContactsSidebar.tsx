@@ -153,7 +153,6 @@ const ContactsSidebar = ({
                     <ChatList
                         chats={chats}
                         onSelectChat={onSelectChat}
-                        user={user}
                     />
                 ) : (
                     <ChatRequestList
