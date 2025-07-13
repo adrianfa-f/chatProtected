@@ -1,12 +1,12 @@
-import { defineConfig, loadEnv } from 'vite';
-import react from '@vitejs/plugin-react';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import { VitePWA } from 'vite-plugin-pwa';
+import { defineConfig, loadEnv } from 'vite'
+import react from '@vitejs/plugin-react'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd());
-  const apiUrl = env.VITE_API_URL || 'http://localhost:4000';
-  const wsUrl = env.VITE_WS_SERVER || 'ws://localhost:4000';
+  const env = loadEnv(mode, process.cwd())
+  const apiUrl = env.VITE_API_URL || 'http://localhost:4000'
+  const wsUrl = env.VITE_WS_SERVER || 'ws://localhost:4000'
 
   const csp = [
     "default-src 'self'",
@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     `connect-src 'self' ${apiUrl} ${wsUrl}`
-  ].join('; ');
+  ].join('; ')
 
   return {
     plugins: [
@@ -23,10 +23,15 @@ export default defineConfig(({ mode }) => {
         include: ['crypto', 'stream'],
         globals: { Buffer: true }
       }),
-      // Añade este plugin PWA
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'icon-192x192.png', 'icon-512x512.png'],
+        filename: 'sw.js',              // Service worker final en /
+        manifestFilename: 'manifest.json',
+        includeAssets: [
+          'favicon.ico',
+          'icon-192x192.png',
+          'icon-512x512.png'
+        ],
         manifest: {
           name: 'Chat Protected',
           short_name: 'Chat',
@@ -35,33 +40,23 @@ export default defineConfig(({ mode }) => {
           background_color: '#ffffff',
           theme_color: '#000000',
           icons: [
-            {
-              src: '/icon-192x192.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: '/icon-512x512.png',
-              sizes: '512x512',
-              type: 'image/png'
-            }
+            { src: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/icon-512x512.png', sizes: '512x512', type: 'image/png' }
           ]
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,png,svg}'],
           runtimeCaching: [
             {
-              urlPattern: ({ url }) => {
-                // Excluir rutas de API y WebSockets
-                return !url.pathname.startsWith('/api') &&
-                  !url.protocol.startsWith('ws');
-              },
+              urlPattern: ({ url }) =>
+                !url.pathname.startsWith('/api') &&
+                !url.protocol.startsWith('ws'),
               handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'static-cache',
                 expiration: {
                   maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
+                  maxAgeSeconds: 60 * 60 * 24 * 30
                 }
               }
             }
@@ -85,28 +80,21 @@ export default defineConfig(({ mode }) => {
           assetFileNames: 'assets/[hash:16].[ext]',
           entryFileNames: '[hash:16].js',
           manualChunks(id) {
-            if (id.includes('libsodium-wrappers')) {
-              return 'crypto';
-            }
-            if (id.includes('node_modules') && !id.includes('libsodium')) {
-              return 'vendor';
-            }
+            if (id.includes('libsodium-wrappers')) return 'crypto'
+            if (id.includes('node_modules') && !id.includes('libsodium'))
+              return 'vendor'
           }
         }
       },
       minify: 'terser',
       terserOptions: {
-        format: {
-          comments: false,
-          beautify: false
-        },
+        format: { comments: false, beautify: false },
         compress: {
-          /* drop_console: true, */
           drop_debugger: true,
           pure_funcs: ['Date.now', 'Date.parse', 'performance.now']
         }
       },
       chunkSizeWarningLimit: 1000
     }
-  };
-});
+  }
+})
