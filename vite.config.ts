@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd());
@@ -18,10 +19,49 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
-      // Polyfills para módulos de Node
       nodePolyfills({
         include: ['crypto', 'stream'],
         globals: { Buffer: true }
+      }),
+      // Añade este plugin PWA
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.ico', 'icon-192x192.png', 'icon-512x512.png'],
+        manifest: {
+          name: 'Chat Protected',
+          short_name: 'Chat',
+          start_url: '/',
+          display: 'standalone',
+          background_color: '#ffffff',
+          theme_color: '#000000',
+          icons: [
+            {
+              src: '/icon-192x192.png',
+              sizes: '192x192',
+              type: 'image/png'
+            },
+            {
+              src: '/icon-512x512.png',
+              sizes: '512x512',
+              type: 'image/png'
+            }
+          ]
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,png,svg}'],
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api'),
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-cache',
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            }
+          ]
+        }
       })
     ],
     server: {
