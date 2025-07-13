@@ -51,12 +51,17 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,png,svg}'],
           runtimeCaching: [
             {
-              urlPattern: ({ url }) => url.pathname.startsWith('/api'),
-              handler: 'NetworkFirst',
+              urlPattern: ({ url }) => {
+                // Excluir rutas de API y WebSockets
+                return !url.pathname.startsWith('/api') &&
+                  !url.protocol.startsWith('ws');
+              },
+              handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'api-cache',
-                cacheableResponse: {
-                  statuses: [0, 200]
+                cacheName: 'static-cache',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
                 }
               }
             }
