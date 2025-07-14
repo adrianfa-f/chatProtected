@@ -292,10 +292,6 @@ export const AuthProvider = ({
         setStorageService(null);
     };
 
-    if (!isInitialized) {
-        return <div>Loading...</div>;
-    }
-
     return (
         <AuthContext.Provider
             value={{
