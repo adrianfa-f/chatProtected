@@ -19,19 +19,12 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
-      nodePolyfills({
-        include: ['crypto', 'stream'],
-        globals: { Buffer: true }
-      }),
+      nodePolyfills({ include: ['crypto', 'stream'], globals: { Buffer: true } }),
       VitePWA({
         registerType: 'autoUpdate',
-        filename: 'sw.js',              // Service worker final en /
+        filename: 'sw.js',
         manifestFilename: 'manifest.json',
-        includeAssets: [
-          'favicon.ico',
-          'icon-192x192.png',
-          'icon-512x512.png'
-        ],
+        includeAssets: ['favicon.ico', 'icon-192x192.png', 'icon-512x512.png'],
         manifest: {
           name: 'Chat Protected',
           short_name: 'Chat',
@@ -40,13 +33,19 @@ export default defineConfig(({ mode }) => {
           background_color: '#ffffff',
           theme_color: '#000000',
           icons: [
-            { src: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-            { src: '/icon-512x512.png', sizes: '512x512', type: 'image/png' }
+            { src: 'icon-192x192.png', sizes: '192x192', type: 'image/png' },
+            { src: 'icon-512x512.png', sizes: '512x512', type: 'image/png' }
           ]
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,png,svg}'],
           runtimeCaching: [
+            // 1) TODAS las llamadas a /api van directo a red
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api'),
+              handler: 'NetworkOnly'
+            },
+            // 2) El resto de recursos (estáticos) cache con StaleWhileRevalidate
             {
               urlPattern: ({ url }) =>
                 !url.pathname.startsWith('/api') &&
@@ -54,10 +53,7 @@ export default defineConfig(({ mode }) => {
               handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'static-cache',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 30
-                }
+                expiration: { maxEntries: 100, maxAgeSeconds: 30 * 24 * 3600 }
               }
             }
           ]
