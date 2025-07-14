@@ -1,14 +1,17 @@
 import api from './api';
 import { generateKeyPair } from './cryptoService';
 import { encryptPrivateKey } from './cryptoService';
-import { saveItem } from '../utils/db';
+import { saveItem, SESSION_STORE } from '../utils/db';
 
 export const login = async (username: string, password: string) => {
     const response = await api.post('/api/auth/login', { username, password });
     const { user } = response.data.data;
 
-    sessionStorage.setItem('userId', user.id);
-    sessionStorage.setItem('username', user.username);
+    await saveItem(SESSION_STORE, {
+        id: 'current_user',
+        userId: user.id,
+        username: user.username
+    });
 
     return {
         user: {
@@ -29,8 +32,11 @@ export const register = async (username: string, password: string) => {
 
     const { user } = response.data.data;
 
-    sessionStorage.setItem('userId', user.id);
-    sessionStorage.setItem('username', user.username);
+    await saveItem(SESSION_STORE, {
+        id: 'current_user',
+        userId: user.id,
+        username: user.username
+    });
 
     // Guardar clave privada cifrada
     const encrypted = await encryptPrivateKey(privateKey, password);

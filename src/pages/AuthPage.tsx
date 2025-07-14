@@ -11,9 +11,10 @@ const AuthPage = () => {
     const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
     useEffect(() => {
-        if (isAuthenticated) navigate('/chat');
+        if (isAuthenticated) {
+            navigate('/chat');
+        }
     }, [isAuthenticated, navigate]);
-
     return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center w-full p-4">
             <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md w-full max-w-md">

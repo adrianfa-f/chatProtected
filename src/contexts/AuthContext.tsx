@@ -17,7 +17,8 @@ import {
     deleteItem,
     CRYPTO_KEYS_STORE,
     ENCRYPTED_DERIVED_KEY_STORE,
-    DEVICE_KEY_STORE
+    DEVICE_KEY_STORE,
+    SESSION_STORE
 } from '../utils/db';
 import {
     bufferToBase64,
@@ -34,6 +35,7 @@ interface AuthContextType {
     register: (username: string, password: string) => Promise<void>;
     logout: () => void;
     isAuthenticated: boolean;
+    isInitialized: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -52,13 +54,14 @@ export const AuthProvider = ({
 
     useEffect(() => {
         const initialize = async () => {
-            const username = sessionStorage.getItem('username');
-            if (!username) {
+            const sessionData = await getItem(SESSION_STORE, 'current_user');
+            if (!sessionData?.username) {
                 setIsInitialized(true);
                 return;
             }
 
             try {
+                const username = sessionData.username;
                 // 1. Obtener clave de dispositivo
                 const deviceKeyItem = await getItem(DEVICE_KEY_STORE, 'deviceKey');
                 if (!deviceKeyItem) return;
@@ -120,7 +123,7 @@ export const AuthProvider = ({
 
                 // 7. Establecer usuario
                 setUser({
-                    id: sessionStorage.getItem('userId') || '',
+                    id: sessionData.userId,
                     username
                 });
 
@@ -147,19 +150,19 @@ export const AuthProvider = ({
         const data = await loginService(username, password);
         setUser(data.user);
 
-        console.log("se guardan cosas en sessionStorage")
         // Guardar en sessionStorage
-        sessionStorage.setItem('userId', data.user.id);
-        sessionStorage.setItem('username', data.user.username);
+        await saveItem(SESSION_STORE, {
+            id: 'current_user',
+            userId: data.user.id,
+            username: data.user.username
+        });
 
         // Obtener clave derivada
         const cryptoKey = await getCryptoKey(password);
-        console.log("Obtenemos la clave derivada: ", cryptoKey)
 
         // Descifrar clave privada
         const keyMeta = await getItem(CRYPTO_KEYS_STORE, `privateKey_${username}`);
         if (!keyMeta) throw new Error('No encrypted private key found');
-        console.log("Obtenemos el objeto que contiene la clave privada encriptada: ", keyMeta)
 
         const decryptedKey = await crypto.subtle.decrypt(
             {
@@ -169,33 +172,25 @@ export const AuthProvider = ({
             cryptoKey,
             base64ToBuffer(keyMeta.encryptedKey)
         );
-        console.log("Buffer de la clave privada decrypted: ", decryptedKey)
 
         setPrivateKey(new TextDecoder().decode(decryptedKey));
 
         // Inicializar StorageService
         setStorageService(new StorageService(cryptoKey));
-        console.log("Actualizacion de los estados de privateKey y storeService")
 
         // Generar/recuperar clave de dispositivo
         let deviceKeyItem = await getItem(DEVICE_KEY_STORE, 'deviceKey');
-        console.log("Tratamos de obtener la clave del dispositivo: ", deviceKeyItem)
         if (!deviceKeyItem) {
-            console.log("fallamos para traer la clave del dispositivo, vamos a crearla")
             const rawKey = await generateDeviceKey();
-            console.log("generamos una clave del dispositivo: ", rawKey)
             deviceKeyItem = {
                 id: 'deviceKey',
                 rawKey: bufferToBase64(rawKey)
             };
-            console.log("creamos un objeto para guardarla: ", deviceKeyItem)
             await saveItem(DEVICE_KEY_STORE, deviceKeyItem);
-            console.log("Guardamos el objeto en deviceKey en indexedDB")
         }
 
         // Exportar clave derivada
         const rawDerivedKey = await crypto.subtle.exportKey("raw", cryptoKey);
-        console.log("exportar la clave derivada: ", rawDerivedKey)
 
         // Cifrar clave derivada con clave de dispositivo
         const deviceCryptoKey = await crypto.subtle.importKey(
@@ -205,7 +200,6 @@ export const AuthProvider = ({
             false,
             ["encrypt"]
         );
-        console.log("Exportacion de clave derivada como buffer: ", deviceCryptoKey)
 
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const encryptedDerivedKey = await crypto.subtle.encrypt(
@@ -213,16 +207,13 @@ export const AuthProvider = ({
             deviceCryptoKey,
             rawDerivedKey
         );
-        console.log("encriptado el buffer de la clave derivada: ", encryptedDerivedKey)
 
-        console.log("Se guarda?")
         // Guardar clave derivada cifrada
         await saveItem(ENCRYPTED_DERIVED_KEY_STORE, {
             id: `derivedKey_${username}`,
             encryptedData: bufferToBase64(encryptedDerivedKey),
             iv: bufferToBase64(iv)
         });
-        console.log("creo que si")
     };
 
     const register = async (username: string, password: string): Promise<void> => {
@@ -314,7 +305,8 @@ export const AuthProvider = ({
                 login,
                 register,
                 logout,
-                isAuthenticated
+                isAuthenticated,
+                isInitialized
             }}
         >
             {children}

@@ -10,17 +10,19 @@ import { cleanupOldChats } from './utils/storageUtils';
 import { useChatSocket } from './hooks/useChatSocket';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const { user } = useAuth();
+  const { user, isInitialized } = useAuth();
 
-  // Si no hay usuario, redirigir a la página de autenticación
-  if (!user) return <Navigate to="/" />;
+  if (!isInitialized) return <div>Loading...</div>;
+  if (!user) return <Navigate to="/" replace />; // Añadir 'replace' evita historial extra
 
   return children;
 };
 
 const AppContent = () => {
-  // Inicializar el hook de WebSocket para el chat
   useChatSocket();
+  const { isInitialized } = useAuth();
+
+  if (!isInitialized) return <div>Loading...</div>;
 
   return (
     <BrowserRouter
@@ -39,9 +41,15 @@ const AppContent = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="/chat/:chatId" element={<ChatWindowPage />} />
-        {/* Redirigir cualquier ruta no reconocida a la página principal */}
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route
+          path="/chat/:chatId"
+          element={
+            <ProtectedRoute>
+              <ChatWindowPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

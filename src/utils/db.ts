@@ -3,8 +3,9 @@ const DB_VERSION = 2;
 
 export const CRYPTO_KEYS_STORE = 'crypto_keys';
 export const ENCRYPTED_MESSAGES_STORE = 'encrypted_messages';
-export const DEVICE_KEY_STORE = 'deviceKey' // Almacena la clave del dispositivo
-export const ENCRYPTED_DERIVED_KEY_STORE = 'encryptedDerivedKey' // Almacena la clave derivada cifrada
+export const DEVICE_KEY_STORE = 'deviceKey';
+export const ENCRYPTED_DERIVED_KEY_STORE = 'encryptedDerivedKey';
+export const SESSION_STORE = 'session_data';
 
 export const initDB = (): Promise<IDBDatabase> =>
     new Promise((resolve, reject) => {
@@ -34,6 +35,10 @@ export const initDB = (): Promise<IDBDatabase> =>
 
             if (!db.objectStoreNames.contains(ENCRYPTED_DERIVED_KEY_STORE)) {
                 db.createObjectStore(ENCRYPTED_DERIVED_KEY_STORE, { keyPath: 'id' });
+            }
+
+            if (!db.objectStoreNames.contains(SESSION_STORE)) {
+                db.createObjectStore(SESSION_STORE, { keyPath: 'id' });
             }
         };
     });
