@@ -19,9 +19,6 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
 const AppContent = () => {
   useChatSocket();
-  const { isInitialized } = useAuth();
-
-  if (!isInitialized) return <div>Loading...</div>;
 
   return (
     <BrowserRouter
