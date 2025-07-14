@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 import { FaSignInAlt, FaUserPlus } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const AuthPage = () => {
+    const navigate = useNavigate();
+    const { isAuthenticated } = useAuth()
     const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+
+    useEffect(() => {
+        if (isAuthenticated) navigate('/chat');
+    }, [isAuthenticated, navigate]);
 
     return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center w-full p-4">
