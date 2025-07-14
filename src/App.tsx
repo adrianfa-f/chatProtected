@@ -10,9 +10,8 @@ import { cleanupOldChats } from './utils/storageUtils';
 import { useChatSocket } from './hooks/useChatSocket';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const { user, isInitialized } = useAuth();
+  const { user } = useAuth();
 
-  if (!isInitialized) return <div>Loading...</div>;
   if (!user) return <Navigate to="/" replace />; // Añadir 'replace' evita historial extra
 
   return children;
