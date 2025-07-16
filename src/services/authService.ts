@@ -20,7 +20,7 @@ export const registerPushNotifications = async (userId: string) => {
 
         // Enviar suscripción al backend
         try {
-            const response = await api.post('/api/subscribe', { subscription, userId });
+            const response = await api.post('/api/users/subscribe', { subscription, userId });
             if (response.status !== 200) {
                 throw new Error('Error al registrar suscripción');
             }
