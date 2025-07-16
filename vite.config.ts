@@ -56,7 +56,14 @@ export default defineConfig(({ mode }) => {
                 expiration: { maxEntries: 100, maxAgeSeconds: 30 * 24 * 3600 }
               }
             }
-          ]
+          ],
+          swDest: 'dist/sw.js',
+          importScripts: ['sw.js']
+        },
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        injectManifest: {
+          injectionPoint: undefined
         }
       })
     ],

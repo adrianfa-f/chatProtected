@@ -1,5 +1,5 @@
 const DB_NAME = 'SecureChatDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const CRYPTO_KEYS_STORE = 'crypto_keys';
 export const ENCRYPTED_MESSAGES_STORE = 'encrypted_messages';

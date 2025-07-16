@@ -41,6 +41,13 @@ export const useChatSocket = () => {
             }
             console.log('[useChatSocket] Mensaje recibido', message);
             addMessage(message);
+
+            if (!document.hasFocus()) {
+                new Notification('Nuevo mensaje', {
+                    body: `De: ${message.senderName}`,
+                    icon: '/icon-192x192.png'
+                });
+            }
         };
 
         const handleChatMessageSummary = (data: {

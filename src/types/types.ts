@@ -16,6 +16,7 @@ export interface Message {
     ciphertext: string;
     plaintext?: string;
     createdAt: Date;
+    senderName?: string;
     status?: MessageStatus;
     nonce?: string; // Agregar si es necesario
 }
