@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
       react(),
       nodePolyfills({ include: ['crypto', 'stream'], globals: { Buffer: true } }),
       VitePWA({
+        scope: '/',
         registerType: 'autoUpdate',
         filename: 'sw.js',
         manifestFilename: 'manifest.json',
@@ -29,6 +30,7 @@ export default defineConfig(({ mode }) => {
           name: 'Chat Protected',
           short_name: 'Chat',
           start_url: '/',
+          scope: '/',
           display: 'standalone',
           background_color: '#ffffff',
           theme_color: '#000000',
