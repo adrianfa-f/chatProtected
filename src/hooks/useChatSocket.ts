@@ -35,18 +35,28 @@ export const useChatSocket = () => {
 
         const handleReceiveMessage = (message: Message) => {
             if (!socket?.connected || !user) return;
+
+            // Evitar mensajes propios
             if (message.senderId === user.id) {
                 console.log('[Socket] Ignorando mensaje emitido por uno mismo');
-                return; // 💥 Esta es la línea mágica
+                return;
             }
+
             console.log('[useChatSocket] Mensaje recibido', message);
             addMessage(message);
 
-            if (!document.hasFocus()) {
-                new Notification('Nuevo mensaje', {
-                    body: `De: ${message.senderName}`,
-                    icon: '/icon-192x192.png'
-                });
+            // Solo mostrar notificación local si la app está en segundo plano
+            // Y NO mostrar si es un mensaje propio
+            if (document.visibilityState !== 'visible') {
+                // Verificar si Notification API está disponible
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(`Nuevo mensaje de ${message.senderName}`, {
+                        body: 'Tienes un nuevo mensaje',
+                        icon: '/icon-192x192.png',
+                        // Añadir datos para manejar clics
+                        data: { chatId: message.chatId }
+                    });
+                }
             }
         };
 

@@ -26,50 +26,53 @@ self.addEventListener('activate', event => {
     event.waitUntil(self.clients.claim());
 });
 
+// Reemplazar todo el bloque del evento 'push'
 self.addEventListener('push', event => {
     console.log('[SW] Evento push recibido');
 
-    try {
-        // 3. Manejar payload con tipo definido
-        let payload: PushNotificationPayload;
-
-        if (event.data) {
+    event.waitUntil(
+        (async () => {
             try {
-                payload = event.data.json() as PushNotificationPayload;
-                console.log('[SW] Payload parseado:', payload);
-            } catch (parseError) {
-                console.error('[SW] Error parseando payload:', parseError);
-                payload = {
-                    title: 'Nuevo mensaje',
-                    body: 'Tienes un nuevo mensaje',
-                    icon: '/icon-192x192.png'
+                let payload: PushNotificationPayload;
+
+                if (event.data) {
+                    try {
+                        // Usar await para parsear correctamente
+                        payload = await event.data.json() as PushNotificationPayload;
+                        console.log('[SW] Payload parseado:', payload);
+                    } catch (parseError) {
+                        console.error('[SW] Error parseando payload:', parseError);
+                        payload = {
+                            title: 'Nuevo mensaje',
+                            body: 'Tienes un nuevo mensaje',
+                            icon: '/icon-192x192.png'
+                        };
+                    }
+                } else {
+                    console.warn('[SW] Evento push sin datos');
+                    payload = {
+                        title: 'Nuevo mensaje',
+                        body: 'Tienes un nuevo mensaje',
+                        icon: '/icon-192x192.png'
+                    };
+                }
+
+                // Mostrar notificación con opciones tipadas
+                const notificationOptions: NotificationOptions = {
+                    body: payload.body,
+                    icon: payload.icon || '/icon-192x192.png',
+                    data: payload.data || {},
+                    // Añadir vibración para mejor compatibilidad
+                    /* vibrate: [200, 100, 200] */
                 };
+
+                await self.registration.showNotification(payload.title, notificationOptions);
+                console.log('[SW] Notificación mostrada con éxito');
+            } catch (error) {
+                console.error('[SW] Error crítico en evento push:', error);
             }
-        } else {
-            console.warn('[SW] Evento push sin datos');
-            payload = {
-                title: 'Nuevo mensaje',
-                body: 'Tienes un nuevo mensaje',
-                icon: '/icon-192x192.png'
-            };
-        }
-
-        // 4. Mostrar notificación con opciones tipadas
-        const notificationOptions: NotificationOptions = {
-            body: payload.body,
-            icon: payload.icon || '/icon-192x192.png',
-            data: payload.data || {}
-        };
-
-        event.waitUntil(
-            self.registration.showNotification(payload.title, notificationOptions)
-                .then(() => console.log('[SW] Notificación mostrada con éxito'))
-                .catch(error => console.error('[SW] Error mostrando notificación:', error))
-        );
-
-    } catch (error) {
-        console.error('[SW] Error crítico en evento push:', error);
-    }
+        })()
+    );
 });
 
 self.addEventListener('notificationclick', event => {
