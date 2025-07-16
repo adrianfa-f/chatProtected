@@ -30,33 +30,42 @@ export const useChatSocket = () => {
 
         const handleChatAccepted = () => {
             console.log('[Socket] Chat aceptado por este usuario, recargando lista');
-            loadChats(); // 👈 recarga visualmente
+            loadChats();
         };
 
         const handleReceiveMessage = (message: Message) => {
             if (!socket?.connected || !user) return;
-
-            // Evitar mensajes propios
             if (message.senderId === user.id) {
                 console.log('[Socket] Ignorando mensaje emitido por uno mismo');
                 return;
             }
-
             console.log('[useChatSocket] Mensaje recibido', message);
             addMessage(message);
+        };
 
-            // Solo mostrar notificación local si la app está en segundo plano
-            // Y NO mostrar si es un mensaje propio
+        const handleNewMessageNotification = (data: {
+            chatId: string;
+            senderId: string;
+            messageId: string;
+        }) => {
+            console.log('[Socket] Notificación de nuevo mensaje recibida', data);
+            // Aquí podrías incrementar el contador de no leídos si lo necesitas
+            // setChats(prevChats => 
+            //   prevChats.map(chat => 
+            //     chat.id === data.chatId 
+            //       ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 } 
+            //       : chat
+            //   )
+            // );
+
+            // Mostrar notificación local solo si la app no está enfocada
             if (document.visibilityState !== 'visible') {
-                // Verificar si Notification API está disponible
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification(`Nuevo mensaje de ${message.senderName}`, {
-                        body: 'Tienes un nuevo mensaje',
-                        icon: '/icon-192x192.png',
-                        // Añadir datos para manejar clics
-                        data: { chatId: message.chatId }
-                    });
-                }
+                // Mostrar notificación local como respaldo
+                new Notification('Nuevo mensaje', {
+                    body: 'Tienes un nuevo mensaje',
+                    icon: '/icon-192x192.png',
+                    data: { chatId: data.chatId }
+                });
             }
         };
 
@@ -118,6 +127,7 @@ export const useChatSocket = () => {
         socket.on('chat-request-rejected', handleChatRejected);
         socket.on('chat-accepted', handleChatAccepted);
         socket.on('chat-message-summary', handleChatMessageSummary);
+        socket.on('new-message-notification', handleNewMessageNotification);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -137,6 +147,7 @@ export const useChatSocket = () => {
             socket.off('chat-request-rejected', handleChatRejected);
             socket.off('chat-accepted', handleChatAccepted);
             socket.off('chat-message-summary', handleChatMessageSummary);
+            socket.off('new-message-notification', handleNewMessageNotification);
             socket.offAny();
         };
     }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest, loadChats, setChatRequests, setChats]);
