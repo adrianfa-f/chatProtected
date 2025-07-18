@@ -1,4 +1,4 @@
-Hay que implementar notificaciones de mesajes recibidos.
+Hay que implementar notificaciones de mesajes recibidos.(No sale el permiso de notificacion)
 Hay que cambiar la logica de guardado de indexedDB a File System Access Api
 
 Mejoras

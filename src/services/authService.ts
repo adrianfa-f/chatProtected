@@ -44,10 +44,6 @@ export const login = async (username: string, password: string) => {
         username: user.username
     });
 
-    if (user && user.id) {
-        await registerPushNotifications(user.id);
-    }
-
     return {
         user: {
             id: user.id,
@@ -72,10 +68,6 @@ export const register = async (username: string, password: string) => {
         userId: user.id,
         username: user.username
     });
-
-    if (user && user.id) {
-        await registerPushNotifications(user.id);
-    }
 
     // Guardar clave privada cifrada
     const encrypted = await encryptPrivateKey(privateKey, password);
