@@ -9,7 +9,7 @@ export const registerPushNotifications = async (userId: string): Promise<Notific
         console.log('Service Worker no soportado');
         return Notification.permission;
     }
-
+    console.log("estamos dentro de registerPushNotification")
     try {
         const registration = await navigator.serviceWorker.ready;
         const permission = await Notification.requestPermission();

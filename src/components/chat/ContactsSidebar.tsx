@@ -37,17 +37,22 @@ const ContactsSidebar = ({
             loadChats();
             loadChatRequests();
         }
+    }, [user, loadChats, loadChatRequests]);
 
+    useEffect(() => {
         const handlePermissionChange = () => {
             setNotificationPermission(Notification.permission);
         };
 
-        // Escuchar cambios en los permisos
+        // Verificar soporte de la API de permisos
         if ('permissions' in navigator) {
             navigator.permissions.query({ name: 'notifications' })
                 .then(permissionStatus => {
                     permissionStatus.onchange = handlePermissionChange;
                 });
+        } else {
+            // Fallback para navegadores sin soporte completo
+            window.addEventListener('focus', handlePermissionChange);
         }
 
         return () => {
@@ -56,9 +61,11 @@ const ContactsSidebar = ({
                     .then(permissionStatus => {
                         permissionStatus.onchange = null;
                     });
+            } else {
+                window.removeEventListener('focus', handlePermissionChange);
             }
         };
-    }, [user, loadChats, loadChatRequests]);
+    }, []);
 
     // Contar solicitudes pendientes recibidas
     const pendingRequestsCount = chatRequests.filter(r =>
@@ -82,10 +89,11 @@ const ContactsSidebar = ({
     };
 
     const handleActivateNotifications = async () => {
+        console.log("estamos pidiendo permiso para nitficacion")
         if (user?.id) {
-            await registerPushNotifications(user.id);
-            // Actualizar estado después de intentar activar
-            setNotificationPermission(Notification.permission);
+            console.log("tenemos userId")
+            const newPermission = await registerPushNotifications(user.id);
+            setNotificationPermission(newPermission);
         }
     };
 
@@ -142,8 +150,8 @@ const ContactsSidebar = ({
                         onClick={handleActivateNotifications}
                         disabled={notificationPermission === 'granted'}
                         className={`p-2 rounded-full transition-colors ${notificationPermission === 'granted'
-                                ? 'text-green-400 cursor-default'
-                                : 'text-gray-300 hover:text-white hover:bg-purple-600'
+                            ? 'text-green-400 cursor-default'
+                            : 'text-gray-300 hover:text-white hover:bg-purple-600'
                             }`}
                         aria-label={notificationPermission === 'granted' ? "Notificaciones activadas" : "Activar notificaciones"}
                     >
