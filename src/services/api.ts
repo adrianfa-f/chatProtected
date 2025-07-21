@@ -9,15 +9,6 @@ const api = axios.create({
     withCredentials: true, // Añade esta línea para enviar cookies
 });
 
-// Elimina el interceptor que usa localStorage
-// api.interceptors.request.use(config => {
-//     const token = localStorage.getItem('token');
-//     if (token) {
-//         config.headers.Authorization = `Bearer ${token}`;
-//     }
-//     return config;
-// });
-
 // Mantenemos el manejo centralizado de errores
 api.interceptors.response.use(
     response => response,

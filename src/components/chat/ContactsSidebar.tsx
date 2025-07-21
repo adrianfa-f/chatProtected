@@ -3,10 +3,9 @@ import { useChat } from '../../contexts/ChatContext';
 import StartNewChatModal from './StartNewChatModal';
 import ChatList from './ChatList';
 import ChatRequestList from './ChatRequestList';
-import { FaSearch, FaUserPlus, FaComments, FaBell, FaTimes, FaBellSlash } from 'react-icons/fa';
+import { FaSearch, FaUserPlus, FaComments, FaBell, FaTimes } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Chat } from '../../types/types';
-import { registerPushNotifications } from '../../services/authService';
 
 interface ContactsSidebarProps {
     activeTab: 'chats' | 'requests';
@@ -28,7 +27,6 @@ const ContactsSidebar = ({
     const { user } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-    const [notificationPermission, setNotificationPermission] = useState(Notification.permission);
     const [searchQuery, setSearchQuery] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,27 +35,6 @@ const ContactsSidebar = ({
             loadChats();
             loadChatRequests();
         }
-
-        const handlePermissionChange = () => {
-            setNotificationPermission(Notification.permission);
-        };
-
-        // Escuchar cambios en los permisos
-        if ('permissions' in navigator) {
-            navigator.permissions.query({ name: 'notifications' })
-                .then(permissionStatus => {
-                    permissionStatus.onchange = handlePermissionChange;
-                });
-        }
-
-        return () => {
-            if ('permissions' in navigator) {
-                navigator.permissions.query({ name: 'notifications' })
-                    .then(permissionStatus => {
-                        permissionStatus.onchange = null;
-                    });
-            }
-        };
     }, [user, loadChats, loadChatRequests]);
 
     // Contar solicitudes pendientes recibidas
@@ -79,14 +56,6 @@ const ContactsSidebar = ({
     const handleCloseSearch = () => {
         setIsSearchExpanded(false);
         setSearchQuery('');
-    };
-
-    const handleActivateNotifications = async () => {
-        if (user?.id) {
-            await registerPushNotifications(user.id);
-            // Actualizar estado después de intentar activar
-            setNotificationPermission(Notification.permission);
-        }
     };
 
     return (
@@ -136,25 +105,6 @@ const ContactsSidebar = ({
 
                 {/* Botones de acción - oculto cuando búsqueda expandida */}
                 <div className={`transition-all duration-300 ${isSearchExpanded ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100 w-auto'}`}>
-
-                    {/* Botón de notificaciones */}
-                    <button
-                        onClick={handleActivateNotifications}
-                        disabled={notificationPermission === 'granted'}
-                        className={`p-2 rounded-full transition-colors ${notificationPermission === 'granted'
-                            ? 'text-green-400 cursor-default'
-                            : 'text-gray-300 hover:text-white hover:bg-purple-600'
-                            }`}
-                        aria-label={notificationPermission === 'granted' ? "Notificaciones activadas" : "Activar notificaciones"}
-                    >
-                        {notificationPermission === 'granted' ? (
-                            <FaBell className="text-xl" />
-                        ) : (
-                            <FaBellSlash className="text-xl" />
-                        )}
-                    </button>
-
-                    {/* Botón de nuevo chat */}
                     <button
                         onClick={() => setIsModalOpen(true)}
                         className="bg-purple-600 hover:bg-purple-700 p-2 rounded-full transition-colors"

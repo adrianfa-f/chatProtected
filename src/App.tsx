@@ -1,4 +1,4 @@
-import { useEffect, type JSX } from 'react';
+import { type JSX } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ChatProvider } from './contexts/ChatContext';
@@ -6,7 +6,6 @@ import { SocketProvider } from './contexts/SocketContext';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import ChatWindowPage from './pages/ChatWindowPage';
-import { cleanupOldChats } from './utils/storageUtils';
 import { useChatSocket } from './hooks/useChatSocket';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
@@ -52,13 +51,6 @@ const AppContent = () => {
 };
 
 const App = () => {
-  useEffect(() => {
-    // Configurar limpieza periódica cada 24 horas
-    cleanupOldChats();
-    const interval = setInterval(cleanupOldChats, 24 * 60 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <AuthProvider>
