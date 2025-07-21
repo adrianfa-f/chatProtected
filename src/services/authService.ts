@@ -4,26 +4,21 @@ import { encryptPrivateKey } from './cryptoService';
 import { saveItem, SESSION_STORE } from '../utils/db';
 import { urlBase64ToUint8Array } from '../utils/encodingUtils';
 
-export const registerPushNotifications = async (userId: string): Promise<NotificationPermission> => {
-    if (!('serviceWorker' in navigator)) {
-        console.log('Service Worker no soportado');
-        return Notification.permission;
-    }
-    console.log("estamos dentro de registerPushNotification")
+export const registerPushNotifications = async (userId: string) => {
+    if (!('serviceWorker' in navigator)) return;
+
     try {
         const registration = await navigator.serviceWorker.ready;
         const permission = await Notification.requestPermission();
 
-        if (permission !== 'granted') {
-            console.log('Permiso para notificaciones no concedido');
-            return permission;
-        }
+        if (permission !== 'granted') return;
 
         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
         });
 
+        // Enviar suscripción al backend
         try {
             const response = await api.post('/api/users/subscribe', { subscription, userId });
             if (response.status !== 200) {
@@ -32,15 +27,12 @@ export const registerPushNotifications = async (userId: string): Promise<Notific
             console.log('Suscripción registrada correctamente');
         } catch (error) {
             console.error('Error registrando suscripción:', error);
+            // Implementar lógica de reintento
         }
-
-        return permission;
     } catch (error) {
         console.error('Error registrando notificaciones:', error);
-        return Notification.permission;
     }
 };
-
 
 export const login = async (username: string, password: string) => {
     const response = await api.post('/api/auth/login', { username, password });
@@ -51,6 +43,10 @@ export const login = async (username: string, password: string) => {
         userId: user.id,
         username: user.username
     });
+
+    if (user && user.id) {
+        await registerPushNotifications(user.id);
+    }
 
     return {
         user: {
@@ -76,6 +72,10 @@ export const register = async (username: string, password: string) => {
         userId: user.id,
         username: user.username
     });
+
+    if (user && user.id) {
+        await registerPushNotifications(user.id);
+    }
 
     // Guardar clave privada cifrada
     const encrypted = await encryptPrivateKey(privateKey, password);

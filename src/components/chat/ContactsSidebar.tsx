@@ -37,22 +37,17 @@ const ContactsSidebar = ({
             loadChats();
             loadChatRequests();
         }
-    }, [user, loadChats, loadChatRequests]);
 
-    useEffect(() => {
         const handlePermissionChange = () => {
             setNotificationPermission(Notification.permission);
         };
 
-        // Verificar soporte de la API de permisos
+        // Escuchar cambios en los permisos
         if ('permissions' in navigator) {
             navigator.permissions.query({ name: 'notifications' })
                 .then(permissionStatus => {
                     permissionStatus.onchange = handlePermissionChange;
                 });
-        } else {
-            // Fallback para navegadores sin soporte completo
-            window.addEventListener('focus', handlePermissionChange);
         }
 
         return () => {
@@ -61,11 +56,9 @@ const ContactsSidebar = ({
                     .then(permissionStatus => {
                         permissionStatus.onchange = null;
                     });
-            } else {
-                window.removeEventListener('focus', handlePermissionChange);
             }
         };
-    }, []);
+    }, [user, loadChats, loadChatRequests]);
 
     // Contar solicitudes pendientes recibidas
     const pendingRequestsCount = chatRequests.filter(r =>
@@ -89,11 +82,10 @@ const ContactsSidebar = ({
     };
 
     const handleActivateNotifications = async () => {
-        console.log("estamos pidiendo permiso para nitficacion")
         if (user?.id) {
-            console.log("tenemos userId")
-            const newPermission = await registerPushNotifications(user.id);
-            setNotificationPermission(newPermission);
+            await registerPushNotifications(user.id);
+            // Actualizar estado después de intentar activar
+            setNotificationPermission(Notification.permission);
         }
     };
 
