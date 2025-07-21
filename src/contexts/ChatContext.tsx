@@ -93,6 +93,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
 
         // 2. Obtener todos los mensajes del backend
         const serverMessages = await api.get(`/api/messages/${chatId}`).then(res => res.data.data);
+        console.log("todos los mensajes obtenidos del backend", serverMessages)
 
         // 3. Procesar todos los mensajes
         const processedMessages = await Promise.all(
