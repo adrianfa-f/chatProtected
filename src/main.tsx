@@ -9,5 +9,5 @@ createRoot(document.getElementById('root')!).render(<App />)
 import { registerSW } from 'virtual:pwa-register'
 
 registerSW({
-  immediate: true, // registra e instala en cuanto arranca la app
+  immediate: true,
 })

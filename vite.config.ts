@@ -42,21 +42,30 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,png,svg}'],
           runtimeCaching: [
-            // 1) TODAS las llamadas a /api van directo a red
+            // Chats
             {
-              urlPattern: ({ url }) => url.pathname.startsWith('/api'),
-              handler: 'NetworkOnly'
-            },
-            // 2) El resto de recursos (estáticos) cache con StaleWhileRevalidate
-            {
-              urlPattern: ({ url }) =>
-                !url.pathname.startsWith('/api') &&
-                !url.protocol.startsWith('ws'),
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/chats'),
               handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'static-cache',
-                expiration: { maxEntries: 100, maxAgeSeconds: 30 * 24 * 3600 }
+                cacheName: 'chats-cache',
+                expiration: { maxEntries: 50, maxAgeSeconds: 24 * 3600 }
               }
+            },
+            // Mensajes
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/messages'),
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'messages-cache',
+                expiration: { maxEntries: 500, maxAgeSeconds: 7 * 24 * 3600 }
+              }
+            },
+            // Otros recursos estáticos
+            {
+              urlPattern: ({ url }) =>
+                !url.pathname.startsWith('/api') && !url.protocol.startsWith('ws'),
+              handler: 'StaleWhileRevalidate',
+              options: { cacheName: 'static-cache' }
             }
           ],
           swDest: 'dist/sw.js',
