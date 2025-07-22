@@ -156,7 +156,7 @@ self.addEventListener('push', event => {
                         }
                     }
                 } catch {
-                    console.warn('[SW] No se encontró sesión de usuario');
+                    console.log('[SW] No se encontró sesión de usuario');
                 }
 
                 console.log("decryptedBody: ", decryptedBody)
