@@ -64,11 +64,15 @@ self.addEventListener('push', event => {
                     // 1. Recuperar sesión del usuario
                     const session = await getItem(SESSION_STORE, 'current_user');
 
+                    console.log("session: ", session)
+
                     if (session && session.username) {
                         const username = session.username;
 
                         // 2. Obtener clave de dispositivo
                         const deviceKeyItem = await getItem(DEVICE_KEY_STORE, 'deviceKey');
+
+                        console.log("deviceKeyItem: ", deviceKeyItem)
 
                         if (deviceKeyItem) {
                             // 3. Obtener clave derivada cifrada
@@ -76,6 +80,8 @@ self.addEventListener('push', event => {
                                 ENCRYPTED_DERIVED_KEY_STORE,
                                 `derivedKey_${username}`
                             );
+
+                            console.log("encryptedKeyItem: ", encryptedKeyItem)
 
                             if (encryptedKeyItem) {
                                 // Importar clave de dispositivo
@@ -87,6 +93,8 @@ self.addEventListener('push', event => {
                                     ["decrypt"]
                                 );
 
+                                console.log("deviceCryptoKey: ", deviceCryptoKey)
+
                                 // Descifrar clave derivada
                                 const decryptedDerivedKey = await crypto.subtle.decrypt(
                                     {
@@ -97,6 +105,8 @@ self.addEventListener('push', event => {
                                     base64ToBuffer(encryptedKeyItem.encryptedData)
                                 );
 
+                                console.log("decryptedDerivedKey: ", decryptedDerivedKey)
+
                                 // Importar clave derivada
                                 const derivedCryptoKey = await crypto.subtle.importKey(
                                     "raw",
@@ -106,11 +116,15 @@ self.addEventListener('push', event => {
                                     ["decrypt"]
                                 );
 
+                                console.log("derivedCryptoKey: ", derivedCryptoKey)
+
                                 // 4. Descifrar clave privada
                                 const keyMeta = await getItem(
                                     CRYPTO_KEYS_STORE,
                                     `privateKey_${username}`
                                 );
+
+                                console.log("keyMeta: ", keyMeta)
 
                                 if (keyMeta) {
                                     const decryptedPrivateKey = await crypto.subtle.decrypt(
@@ -127,11 +141,16 @@ self.addEventListener('push', event => {
                                     // 5. Descifrar el mensaje usando libsodium
                                     await libsodium.ready;
                                     const ctBytes = libsodium.from_base64(payload.body);
+                                    console.log("ctBytes: ", ctBytes)
                                     const pkBytes = libsodium.from_base64(privateKey);
+                                    console.log("pkBytes: ", pkBytes)
                                     const pubBytes = libsodium.crypto_scalarmult_base(pkBytes);
+                                    console.log("pubBytes: ", pubBytes)
                                     const opened = libsodium.crypto_box_seal_open(ctBytes, pubBytes, pkBytes);
+                                    console.log("opened: ", opened)
 
                                     decryptedBody = libsodium.to_string(opened);
+                                    console.log("decryptedBody: ", decryptedBody)
                                 }
                             }
                         }
