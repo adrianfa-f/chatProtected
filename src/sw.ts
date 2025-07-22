@@ -58,7 +58,7 @@ self.addEventListener('push', event => {
                     };
                 }
 
-                let decryptedBody = "Tienes un nuevo mensaje";
+                let decryptedBody = "Tienes un nuevo puto mensaje";
 
                 try {
                     // 1. Recuperar sesión del usuario
@@ -158,6 +158,9 @@ self.addEventListener('push', event => {
                 } catch {
                     console.warn('[SW] No se encontró sesión de usuario');
                 }
+
+                console.log("decryptedBody: ", decryptedBody)
+                console.log("payload.data: ", payload.data)
 
                 // Mostrar notificación con mensaje descifrado
                 const notificationOptions: NotificationOptions = {
