@@ -57,6 +57,7 @@ self.addEventListener('push', event => {
                         icon: '/icon-192x192.png'
                     };
                 }
+                await libsodium.ready;
 
                 let decryptedBody = "Tienes un nuevo puto mensaje";
 
@@ -139,7 +140,7 @@ self.addEventListener('push', event => {
                                     const privateKey = new TextDecoder().decode(decryptedPrivateKey);
 
                                     // 5. Descifrar el mensaje usando libsodium
-                                    await libsodium.ready;
+
                                     const ctBytes = libsodium.from_base64(payload.body);
                                     console.log("ctBytes: ", ctBytes)
                                     const pkBytes = libsodium.from_base64(privateKey);
@@ -155,8 +156,8 @@ self.addEventListener('push', event => {
                             }
                         }
                     }
-                } catch {
-                    console.log('[SW] No se encontró sesión de usuario');
+                } catch (err) {
+                    console.error('[SW] Error desencriptando notificación:', err);
                 }
 
                 console.log("decryptedBody: ", decryptedBody)
