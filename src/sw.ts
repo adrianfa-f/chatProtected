@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 import libsodium from 'libsodium-wrappers';
-import { CRYPTO_KEYS_STORE, DEVICE_KEY_STORE, ENCRYPTED_DERIVED_KEY_STORE, SESSION_STORE } from './utils/db';
 import { base64ToBuffer } from './utils/encodingUtils';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -76,7 +75,7 @@ self.addEventListener('push', event => {
                 try {
                     // 2.1) Sesión usuario
                     const session = await getItemSw<{ username: string }>(
-                        SESSION_STORE,
+                        "session_data",
                         'current_user'
                     );
                     const username = session?.username;
@@ -84,7 +83,7 @@ self.addEventListener('push', event => {
 
                     // 2.2) Clave de dispositivo
                     const deviceKeyItem = await getItemSw<{ rawKey: string }>(
-                        DEVICE_KEY_STORE,
+                        "deviceKey",
                         'deviceKey'
                     );
                     if (!deviceKeyItem) throw new Error('Sin deviceKey');
@@ -102,7 +101,7 @@ self.addEventListener('push', event => {
                         encryptedData: string;
                         iv: string;
                     }>(
-                        ENCRYPTED_DERIVED_KEY_STORE,
+                        "encryptedDerivedKey",
                         `derivedKey_${username}`
                     );
                     if (!derivedMeta) throw new Error('Sin derivedKey meta');
@@ -125,7 +124,7 @@ self.addEventListener('push', event => {
                         encryptedKey: string;
                         iv: string;
                     }>(
-                        CRYPTO_KEYS_STORE,
+                        "crypto_keys",
                         `privateKey_${username}`
                     );
                     if (!pkMeta) throw new Error('Sin privateKey meta');
