@@ -17,7 +17,7 @@ interface PushNotificationPayload {
 
 async function getItemSw<T>(storeName: string, key: string): Promise<T | undefined> {
     return new Promise((resolve, reject) => {
-        const openReq = indexedDB.open('chat-protected-db');
+        const openReq = indexedDB.open('SecureChatDB');
         openReq.onerror = () => reject(openReq.error);
         openReq.onsuccess = () => {
             const db = openReq.result;
