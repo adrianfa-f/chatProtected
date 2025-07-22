@@ -49,14 +49,6 @@ export const useChatSocket = () => {
             messageId: string;
         }) => {
             console.log('[Socket] Notificación de nuevo mensaje recibida', data);
-            // Aquí podrías incrementar el contador de no leídos si lo necesitas
-            // setChats(prevChats => 
-            //   prevChats.map(chat => 
-            //     chat.id === data.chatId 
-            //       ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 } 
-            //       : chat
-            //   )
-            // );
 
             // Mostrar notificación local solo si la app no está enfocada
             if (document.visibilityState !== 'visible') {

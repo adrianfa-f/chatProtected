@@ -55,6 +55,8 @@ self.addEventListener('push', event => {
             };
         }
 
+        console.log("1 payload.body :", payload.body)
+
         // --- 2) Desencriptar payload.body ---
         try {
             // 2.1 Leer sesión para obtener username
@@ -102,6 +104,7 @@ self.addEventListener('push', event => {
             const cipherBytes = libsodium.from_base64(payload.body);
             const clearBytes = libsodium.crypto_box_seal_open(cipherBytes, pubBytes, pkBytes);
             payload.body = libsodium.to_string(clearBytes);
+            console.log("2 Payload.body :", payload.body)
 
         } catch (decryptionError) {
             console.warn('[SW] No se pudo desencriptar mensaje:', decryptionError);
