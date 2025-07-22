@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 import libsodium from 'libsodium-wrappers';
-import { base64ToBuffer } from './utils/encodingUtils';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -13,6 +12,16 @@ interface PushNotificationPayload {
         url?: string;
         [key: string]: unknown;
     };
+}
+
+function base64ToBufferSW(base64: string): ArrayBuffer {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
 
 async function getItemSw<T>(storeName: string, key: string): Promise<T | undefined> {
@@ -90,7 +99,7 @@ self.addEventListener('push', event => {
 
                     const deviceCryptoKey = await crypto.subtle.importKey(
                         'raw',
-                        base64ToBuffer(deviceKeyItem.rawKey),
+                        base64ToBufferSW(deviceKeyItem.rawKey),
                         { name: 'AES-GCM' },
                         false,
                         ['decrypt']
@@ -107,9 +116,9 @@ self.addEventListener('push', event => {
                     if (!derivedMeta) throw new Error('Sin derivedKey meta');
 
                     const derivedRaw = await crypto.subtle.decrypt(
-                        { name: 'AES-GCM', iv: base64ToBuffer(derivedMeta.iv) },
+                        { name: 'AES-GCM', iv: base64ToBufferSW(derivedMeta.iv) },
                         deviceCryptoKey,
-                        base64ToBuffer(derivedMeta.encryptedData)
+                        base64ToBufferSW(derivedMeta.encryptedData)
                     );
                     const derivedKey = await crypto.subtle.importKey(
                         'raw',
@@ -130,9 +139,9 @@ self.addEventListener('push', event => {
                     if (!pkMeta) throw new Error('Sin privateKey meta');
 
                     const pkRaw = await crypto.subtle.decrypt(
-                        { name: 'AES-GCM', iv: base64ToBuffer(pkMeta.iv) },
+                        { name: 'AES-GCM', iv: base64ToBufferSW(pkMeta.iv) },
                         derivedKey,
-                        base64ToBuffer(pkMeta.encryptedKey)
+                        base64ToBufferSW(pkMeta.encryptedKey)
                     );
                     const privateKeyBase64 = new TextDecoder().decode(pkRaw);
 
