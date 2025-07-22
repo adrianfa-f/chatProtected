@@ -1,8 +1,7 @@
 /// <reference lib="webworker" />
-importScripts('sw-crypto-db.js', 'sw-crypto-utils.js', 'libsodium-wrappers.js');
 import libsodium from 'libsodium-wrappers';
+import { CRYPTO_KEYS_STORE, DEVICE_KEY_STORE, ENCRYPTED_DERIVED_KEY_STORE, getItem, SESSION_STORE } from './utils/db';
 import { base64ToBuffer } from './utils/encodingUtils';
-import { getItem } from './utils/db';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -34,92 +33,132 @@ self.addEventListener('activate', event => {
 self.addEventListener('push', event => {
     console.log('[SW] Evento push recibido');
 
-    event.waitUntil((async () => {
-        // --- 1) Parsear payload existente ---
-        let payload: PushNotificationPayload;
-        if (event.data) {
+    event.waitUntil(
+        (async () => {
             try {
-                payload = await event.data.json() as PushNotificationPayload;
-            } catch {
-                payload = {
-                    title: 'Nuevo mensaje',
+                let payload: PushNotificationPayload;
+
+                if (event.data) {
+                    try {
+                        payload = await event.data.json() as PushNotificationPayload;
+                    } catch (parseError) {
+                        console.error('[SW] Error parseando payload:', parseError);
+                        payload = {
+                            title: 'Nuevo mensaje',
+                            body: 'Tienes un nuevo mensaje',
+                            icon: '/icon-192x192.png'
+                        };
+                    }
+                } else {
+                    console.warn('[SW] Evento push sin datos');
+                    payload = {
+                        title: 'Nuevo mensaje',
+                        body: 'Tienes un nuevo mensaje',
+                        icon: '/icon-192x192.png'
+                    };
+                }
+
+                let decryptedBody = "Tienes un nuevo mensaje";
+
+                try {
+                    // 1. Recuperar sesión del usuario
+                    const session = await getItem(SESSION_STORE, 'current_user');
+
+                    if (session && session.username) {
+                        const username = session.username;
+
+                        // 2. Obtener clave de dispositivo
+                        const deviceKeyItem = await getItem(DEVICE_KEY_STORE, 'deviceKey');
+
+                        if (deviceKeyItem) {
+                            // 3. Obtener clave derivada cifrada
+                            const encryptedKeyItem = await getItem(
+                                ENCRYPTED_DERIVED_KEY_STORE,
+                                `derivedKey_${username}`
+                            );
+
+                            if (encryptedKeyItem) {
+                                // Importar clave de dispositivo
+                                const deviceCryptoKey = await crypto.subtle.importKey(
+                                    "raw",
+                                    base64ToBuffer(deviceKeyItem.rawKey),
+                                    { name: "AES-GCM" },
+                                    false,
+                                    ["decrypt"]
+                                );
+
+                                // Descifrar clave derivada
+                                const decryptedDerivedKey = await crypto.subtle.decrypt(
+                                    {
+                                        name: "AES-GCM",
+                                        iv: base64ToBuffer(encryptedKeyItem.iv)
+                                    },
+                                    deviceCryptoKey,
+                                    base64ToBuffer(encryptedKeyItem.encryptedData)
+                                );
+
+                                // Importar clave derivada
+                                const derivedCryptoKey = await crypto.subtle.importKey(
+                                    "raw",
+                                    decryptedDerivedKey,
+                                    { name: "AES-GCM" },
+                                    false,
+                                    ["decrypt"]
+                                );
+
+                                // 4. Descifrar clave privada
+                                const keyMeta = await getItem(
+                                    CRYPTO_KEYS_STORE,
+                                    `privateKey_${username}`
+                                );
+
+                                if (keyMeta) {
+                                    const decryptedPrivateKey = await crypto.subtle.decrypt(
+                                        {
+                                            name: "AES-GCM",
+                                            iv: base64ToBuffer(keyMeta.iv)
+                                        },
+                                        derivedCryptoKey,
+                                        base64ToBuffer(keyMeta.encryptedKey)
+                                    );
+
+                                    const privateKey = new TextDecoder().decode(decryptedPrivateKey);
+
+                                    // 5. Descifrar el mensaje usando libsodium
+                                    await libsodium.ready;
+                                    const ctBytes = libsodium.from_base64(payload.body);
+                                    const pkBytes = libsodium.from_base64(privateKey);
+                                    const pubBytes = libsodium.crypto_scalarmult_base(pkBytes);
+                                    const opened = libsodium.crypto_box_seal_open(ctBytes, pubBytes, pkBytes);
+
+                                    decryptedBody = libsodium.to_string(opened);
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    console.warn('[SW] No se encontró sesión de usuario');
+                }
+
+                // Mostrar notificación con mensaje descifrado
+                const notificationOptions: NotificationOptions = {
+                    body: decryptedBody,
+                    icon: payload.icon || '/icon-192x192.png',
+                    data: payload.data || {},
+                };
+
+                await self.registration.showNotification(payload.title, notificationOptions);
+                console.log('[SW] Notificación mostrada con mensaje descifrado');
+            } catch (error) {
+                console.error('[SW] Error crítico en evento push:', error);
+                // Mostrar notificación genérica en caso de error
+                await self.registration.showNotification('Nuevo mensaje', {
                     body: 'Tienes un nuevo mensaje',
                     icon: '/icon-192x192.png'
-                };
+                });
             }
-        } else {
-            payload = {
-                title: 'Nuevo mensaje',
-                body: 'Tienes un nuevo mensaje',
-                icon: '/icon-192x192.png'
-            };
-        }
-
-        console.log("1 payload.body :", payload.body)
-
-        // --- 2) Desencriptar payload.body ---
-        try {
-            // 2.1 Leer sesión para obtener username
-            const session = await getItem('sessions', 'current_user');
-            const username = session?.username as string;
-            if (!username) throw new Error('Sin usuario en sesión');
-
-            // 2.2 Obtener clave de dispositivo y derivada
-            const deviceItem = await getItem('device_keys', 'deviceKey');
-            const deviceKey = await crypto.subtle.importKey(
-                'raw',
-                base64ToBuffer(deviceItem.rawKey),
-                { name: 'AES-GCM' },
-                false,
-                ['decrypt']
-            );
-
-            const derivedMeta = await getItem('crypto_keys', `derivedKey_${username}`);
-            const derivedRaw = await crypto.subtle.decrypt(
-                { name: 'AES-GCM', iv: base64ToBuffer(derivedMeta.iv) },
-                deviceKey,
-                base64ToBuffer(derivedMeta.encryptedData)
-            );
-            const derivedKey = await crypto.subtle.importKey(
-                'raw',
-                derivedRaw,
-                { name: 'AES-GCM' },
-                false,
-                ['decrypt']
-            );
-
-            // 2.3 Obtener y descifrar clave privada
-            const pkMeta = await getItem('crypto_keys', `privateKey_${username}`);
-            const pkRaw = await crypto.subtle.decrypt(
-                { name: 'AES-GCM', iv: base64ToBuffer(pkMeta.iv) },
-                derivedKey,
-                base64ToBuffer(pkMeta.encryptedKey)
-            );
-            const privateKeyBase64 = new TextDecoder().decode(pkRaw);
-
-            // 2.4 Desencriptar mensaje con libsodium
-            await libsodium.ready;
-            const pkBytes = libsodium.from_base64(privateKeyBase64);
-            const pubBytes = libsodium.crypto_scalarmult_base(pkBytes);
-            const cipherBytes = libsodium.from_base64(payload.body);
-            const clearBytes = libsodium.crypto_box_seal_open(cipherBytes, pubBytes, pkBytes);
-            payload.body = libsodium.to_string(clearBytes);
-            console.log("2 Payload.body :", payload.body)
-
-        } catch (decryptionError) {
-            console.warn('[SW] No se pudo desencriptar mensaje:', decryptionError);
-            // payload.body queda como ciphertext
-        }
-
-        // --- 3) Mostrar notificación con body desencriptado (o ciphertext si falló) ---
-        await self.registration.showNotification(payload.title, {
-            body: payload.body,
-            icon: payload.icon || '/icon-192x192.png',
-            data: payload.data
-        });
-        console.log('[SW] Notificación mostrada');
-
-    })());
+        })()
+    );
 });
 
 self.addEventListener('notificationclick', event => {
