@@ -4,6 +4,7 @@ import { useWebRTC } from '../hooks/useWebRTC'; // ✅ Importar el hook aquí
 interface CallContextType {
     callState: 'idle' | 'calling' | 'ringing' | 'in-progress';
     remoteUser: { id: string; username: string } | null;
+    setRemoteUser: (user: { id: string; username: string } | null) => void;
     startCall: (userId: string, username: string) => void;
     endCall: () => void;
     acceptCall: () => void;
@@ -41,7 +42,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <CallContext.Provider value={{ callState, remoteUser, startCall, endCall, acceptCall }}>
+        <CallContext.Provider value={{ callState, remoteUser, setRemoteUser, startCall, endCall, acceptCall }}>
             {children}
         </CallContext.Provider>
     );

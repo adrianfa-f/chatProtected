@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSocket } from '../contexts/SocketContext';
+import { useCall } from '../contexts/CallContext';
 
 export const useWebRTC = () => {
     const socket = useSocket();
+    const { setRemoteUser, acceptCall } = useCall();
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const peerConnection = useRef<RTCPeerConnection | null>(null);
@@ -31,7 +33,7 @@ export const useWebRTC = () => {
     useEffect(() => {
         if (!socket) return;
 
-        // 1️⃣ Escuchar oferta de WebRTC
+        // Oferta recibida: preparar conexión y responder
         socket.on('webrtc-offer', async ({ from, offer }) => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -47,12 +49,16 @@ export const useWebRTC = () => {
                 await pc.setLocalDescription(answer);
 
                 socket.emit('webrtc-answer', { to: from, answer });
+
+                // ✅ Activar pantalla de llamada entrante
+                setRemoteUser({ id: from, username: 'Desconocido' });
+                acceptCall(); // Establece callState = 'in-progress'
             } catch (err) {
                 console.error('[WebRTC] Error al recibir oferta:', err);
             }
         });
 
-        // 2️⃣ Escuchar respuesta
+        // Respuesta recibida: completar conexión
         socket.on('webrtc-answer', async ({ answer }) => {
             try {
                 await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(answer));
@@ -61,7 +67,7 @@ export const useWebRTC = () => {
             }
         });
 
-        // 3️⃣ Escuchar ICE candidates
+        // ICE Candidate recibido
         socket.on('webrtc-ice-candidate', async ({ candidate }) => {
             try {
                 await peerConnection.current?.addIceCandidate(new RTCIceCandidate(candidate));
@@ -70,13 +76,12 @@ export const useWebRTC = () => {
             }
         });
 
-        // Limpieza de listeners al desmontar
         return () => {
             socket.off('webrtc-offer');
             socket.off('webrtc-answer');
             socket.off('webrtc-ice-candidate');
         };
-    }, [socket, setupPeerConnection]);
+    }, [socket, setupPeerConnection, acceptCall, setRemoteUser]);
 
     // Iniciar llamada
     const startCall = useCallback(async (remoteUserId: string) => {
