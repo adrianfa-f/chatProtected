@@ -79,6 +79,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         socket.on('webrtc-answer', async ({ answer }) => {
             try {
                 await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(answer));
+                setCallState('in-progress');
             } catch (err) {
                 console.error('[CallContext] Error al aplicar respuesta:', err);
             }
