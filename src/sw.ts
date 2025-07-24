@@ -52,44 +52,43 @@ self.addEventListener('activate', event => {
     event.waitUntil(self.clients.claim());
 });
 
-// Reemplazar todo el bloque del evento 'push'
 self.addEventListener('push', event => {
     console.log('[SW] Evento push recibido');
 
     event.waitUntil(
         (async () => {
-            try {
-                // 1) Parsear payload original
-                let payload: PushNotificationPayload;
-                if (event.data) {
-                    try {
-                        payload = (await event.data.json()) as PushNotificationPayload;
-                    } catch {
-                        payload = {
-                            title: 'Nuevo mensaje',
-                            body: 'Tienes un nuevo mensaje',
-                            icon: '/icon-192x192.png'
-                        };
-                    }
-                } else {
-                    payload = {
-                        title: 'Nuevo mensaje',
-                        body: 'Tienes un nuevo mensaje',
-                        icon: '/icon-192x192.png'
-                    };
-                }
+            // Definir una notificación genérica por si acaso
+            const genericNotification: PushNotificationPayload = {
+                title: 'Nuevo mensaje',
+                body: 'Tienes un nuevo mensaje',
+                icon: '/icon-192x192.png'
+            };
 
-                // 2) Intentar desencriptar payload.body
-                let decryptedBody = payload.body;
+            // 1) Parsear payload original
+            let payload: PushNotificationPayload;
+            if (event.data) {
                 try {
-                    // 2.1) Sesión usuario
-                    const session = await getItemSw<{ username: string }>(
-                        "session_data",
-                        'current_user'
-                    );
-                    const username = session?.username;
-                    if (!username) throw new Error('Sin sesión activa');
+                    payload = (await event.data.json()) as PushNotificationPayload;
+                } catch {
+                    payload = { ...genericNotification };
+                }
+            } else {
+                payload = { ...genericNotification };
+            }
 
+            // 2) Intentar desencriptar payload.body (con límite de tiempo)
+            let decryptedBody = payload.body;
+            try {
+                // 2.1) Sesión usuario
+                const session = await getItemSw<{ username: string }>(
+                    "session_data",
+                    'current_user'
+                );
+                const username = session?.username;
+                if (!username) throw new Error('Sin sesión activa');
+
+                // Si hay sesión, intentamos desencriptar pero con un tiempo límite
+                const decryptionPromise = (async () => {
                     // 2.2) Clave de dispositivo
                     const deviceKeyItem = await getItemSw<{ rawKey: string }>(
                         "deviceKey",
@@ -155,29 +154,31 @@ self.addEventListener('push', event => {
                         pubBytes,
                         pkBytes
                     );
-                    decryptedBody = libsodium.to_string(opened);
-                } catch (err) {
-                    console.error('[SW] Error desencriptando notificación:', err);
-                }
+                    return libsodium.to_string(opened);
+                })();
 
-                // 3) Mostrar notificación con body (desencriptado o original)
-                const notificationOptions: NotificationOptions = {
-                    body: decryptedBody,
-                    icon: payload.icon || '/icon-192x192.png',
-                    data: payload.data || {}
-                };
-                await self.registration.showNotification(
-                    payload.title,
-                    notificationOptions
-                );
-                console.log('[SW] Notificación mostrada');
-            } catch (error) {
-                console.error('[SW] Error crítico en evento push:', error);
-                await self.registration.showNotification('Nuevo mensaje', {
-                    body: 'Tienes un nuevo mensaje',
-                    icon: '/icon-192x192.png'
-                });
+                // Esperar máximo 3 segundos para la desencriptación
+                decryptedBody = await Promise.race([
+                    decryptionPromise,
+                    new Promise<string>((resolve) => setTimeout(() => resolve(genericNotification.body), 3000))
+                ]);
+            } catch (err) {
+                console.error('[SW] Error desencriptando notificación:', err);
+                // Si hay error, usamos el cuerpo original o el genérico
+                decryptedBody = decryptedBody || genericNotification.body;
             }
+
+            // 3) Mostrar notificación con body (desencriptado, original o genérico)
+            const notificationOptions: NotificationOptions = {
+                body: decryptedBody,
+                icon: payload.icon || '/icon-192x192.png',
+                data: payload.data || {}
+            };
+            await self.registration.showNotification(
+                payload.title,
+                notificationOptions
+            );
+            console.log('[SW] Notificación mostrada');
         })()
     );
 });
