@@ -76,6 +76,19 @@ self.addEventListener('push', event => {
                 payload = { ...genericNotification };
             }
 
+            if (payload.data?.type === 'incoming-call') {
+                await self.registration.showNotification('Llamada entrante', {
+                    body: `${payload.data.username} te está llamando`,
+                    icon: '/icon-call.png',
+                    data: {
+                        url: `/chat/${payload.data.chatId}`, // ✅ Redirige al chat correspondiente
+                        ...payload.data
+                    }
+                });
+                console.log('[SW] Notificación de llamada entrante mostrada');
+                return; // ✅ Evita desencriptar si es llamada
+            }
+
             // 2) Intentar desencriptar payload.body (con límite de tiempo)
             let decryptedBody = payload.body;
             try {

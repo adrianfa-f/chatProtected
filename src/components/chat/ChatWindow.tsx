@@ -2,11 +2,13 @@ import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
-import { FaArrowLeft, FaCircle } from 'react-icons/fa';
+import { FaArrowLeft, FaCircle, FaPhone } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { joinChat, leaveChat } from '../../services/socketService';
+import { useCall } from '../../contexts/CallContext';
+import CallScreen from './CallScreen';
 
 const ChatWindow = () => {
     const { activeChat, messages } = useChat();
@@ -14,6 +16,7 @@ const ChatWindow = () => {
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const socket = useSocket();
+    const { startCall } = useCall();
 
     const formatLastSeen = (lastSeen?: string | Date): string => {
         if (!lastSeen) return "Desconocido";
@@ -81,6 +84,7 @@ const ChatWindow = () => {
 
     return (
         <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
+            <CallScreen />
             <div className="bg-white shadow-sm py-3 px-4 flex items-center border-b border-gray-200 sticky top-0 z-10">
                 <button onClick={() => navigate('/chat')} className="mr-3 text-gray-500 hover:text-gray-700">
                     <FaArrowLeft />
@@ -109,6 +113,14 @@ const ChatWindow = () => {
                             )}
                         </p>
                     </div>
+                </div>
+                <div className="ml-auto">
+                    <button
+                        onClick={() => startCall(otherUser.id, otherUser.username)}
+                        className="text-purple-600 hover:text-purple-800"
+                    >
+                        <FaPhone />
+                    </button>
                 </div>
             </div>
 

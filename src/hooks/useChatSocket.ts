@@ -104,7 +104,7 @@ export const useChatSocket = () => {
 
         const handleInvalidToken = () => {
             console.log('[useChatSocket] Token inválido - forzar logout');
-            logout();
+            /* logout(); */
         };
 
         socket.on('receive-message', handleReceiveMessage);

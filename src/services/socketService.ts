@@ -51,3 +51,24 @@ export const testSocketConnection = (socket: Socket | null) => {
     console.log('[SocketService] Probando conexión de socket');
     socket.emit('test-event', { message: 'Test from client' });
 };
+
+export const handleWebRTCOffer = (
+    socket: Socket,
+    callback: (data: { from: string; offer: RTCSessionDescription }) => void
+) => {
+    socket.on('webrtc-offer', callback);
+};
+
+export const handleWebRTCAnswer = (
+    socket: Socket,
+    callback: (data: { answer: RTCSessionDescription }) => void
+) => {
+    socket.on('webrtc-answer', callback);
+};
+
+export const handleWebRTCICECandidate = (
+    socket: Socket,
+    callback: (data: { candidate: RTCIceCandidate }) => void
+) => {
+    socket.on('webrtc-ice-candidate', callback);
+};

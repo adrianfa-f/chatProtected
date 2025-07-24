@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ChatProvider } from './contexts/ChatContext';
 import { SocketProvider } from './contexts/SocketContext';
+import { CallProvider } from './contexts/CallContext';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import ChatWindowPage from './pages/ChatWindowPage';
@@ -56,7 +57,9 @@ const App = () => {
     <AuthProvider>
       <SocketProvider>
         <ChatProvider>
-          <AppContent />
+          <CallProvider>
+            <AppContent />
+          </CallProvider>
         </ChatProvider>
       </SocketProvider>
     </AuthProvider>
