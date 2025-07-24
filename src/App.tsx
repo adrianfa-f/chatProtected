@@ -8,6 +8,7 @@ import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import ChatWindowPage from './pages/ChatWindowPage';
 import { useChatSocket } from './hooks/useChatSocket';
+import CallScreen from './components/chat/CallScreen';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 
 const AppContent = () => {
   useChatSocket();
+  const { user } = useAuth();
 
   return (
     <BrowserRouter
@@ -47,6 +49,7 @@ const AppContent = () => {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {user && <CallScreen />}
     </BrowserRouter>
   );
 };

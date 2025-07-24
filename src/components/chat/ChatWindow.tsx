@@ -8,7 +8,6 @@ import { useEffect, useRef } from 'react';
 import { useSocket } from '../../contexts/SocketContext';
 import { joinChat, leaveChat } from '../../services/socketService';
 import { useCall } from '../../contexts/CallContext';
-import CallScreen from './CallScreen';
 
 const ChatWindow = () => {
     const { activeChat, messages } = useChat();
@@ -84,7 +83,6 @@ const ChatWindow = () => {
 
     return (
         <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
-            <CallScreen />
             <div className="bg-white shadow-sm py-3 px-4 flex items-center border-b border-gray-200 sticky top-0 z-10">
                 <button onClick={() => navigate('/chat')} className="mr-3 text-gray-500 hover:text-gray-700">
                     <FaArrowLeft />
