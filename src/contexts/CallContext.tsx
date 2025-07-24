@@ -69,7 +69,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
                 socket.emit('webrtc-answer', { to: from, answer });
                 setRemoteUser({ id: from, username: 'Desconocido' });
-                setCallState('in-progress');
+                setCallState('ringing');
             } catch (err) {
                 console.error('[CallContext] Error al manejar oferta:', err);
             }
