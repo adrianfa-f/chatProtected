@@ -67,12 +67,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     // Memoizar endCall para que tenga una referencia estable
     const endCall = useCallback(() => {
-        // Notificar al otro usuario que la llamada ha terminado
         if (remoteUser) {
             socket?.emit('call-ended', { to: remoteUser.id });
         }
 
-        // Limpiar recursos
+        // Cerrar explícitamente la conexión
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
@@ -86,7 +85,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         setRemoteStream(null);
         setRemoteUser(null);
         setCallState('idle');
-    }, [remoteUser, socket, localStream]); // Dependencias
+    }, [remoteUser, socket, localStream]);
 
     // Memoizar acceptCall para consistencia
     const acceptCall = useCallback(() => {
@@ -112,29 +111,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             try {
                 if (callState !== 'ringing') return;
 
-                // 1.1) Pedir el audio local y guardarlo
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 setLocalStream(stream);
 
-                // 1.2) Crear / configurar el peerConnection
                 const pc = setupPeerConnection();
                 peerConnection.current = pc;
 
-                // 1.3) Añadir tracks locales
+                // Añadir tracks locales
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-                // 1.4) Registrar ontrack para recibir el audio remoto
-                pc.ontrack = event => {
-                    console.log('[CallContext] ontrack recibido', event.streams);
-                    setRemoteStream(event.streams[0]);
-                };
-
-                // 1.5) Aplicar la oferta y crear la respuesta
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
 
-                // 1.6) Enviar la respuesta de vuelta
                 socket.emit('webrtc-answer', { to: from, answer });
             } catch (err) {
                 console.error('[CallContext] Error al manejar oferta:', err);
@@ -149,16 +138,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 const pc = peerConnection.current;
                 if (!pc) return;
 
-                // 2.1) Registrar también ontrack aquí (caller side)
-                pc.ontrack = event => {
-                    console.log('[CallContext] ontrack recibido (caller)', event.streams);
-                    setRemoteStream(event.streams[0]);
-                };
-
-                // 2.2) Aplicar la respuesta remota
                 await pc.setRemoteDescription(new RTCSessionDescription(answer));
-
-                // 2.3) Ya estamos en progreso
                 setCallState('in-progress');
             } catch (err) {
                 console.error('[CallContext] Error al aplicar respuesta:', err);
@@ -168,9 +148,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
         // ICE candidate
-        socket.on('webrtc-ice-candidate', async ({ from, candidate }) => {
-            console.log('[WebRTC] ICE candidate recibido de', from, candidate);
-            if (peerConnection.current) {
+        socket.on('webrtc-ice-candidate', async ({ candidate }) => {
+            console.log('[WebRTC] ICE candidate recibido', candidate);
+            if (peerConnection.current && candidate) {
                 try {
                     await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
                     console.log('[WebRTC] Candidate añadido');
@@ -202,6 +182,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     // Memoizar startCall para consistencia
     const startCall = useCallback(async (userId: string, username: string) => {
+        // Cerrar conexión existente si hay una
+        if (peerConnection.current) {
+            peerConnection.current.close();
+        }
+
         setRemoteUser({ id: userId, username });
         setCallState('calling');
 
