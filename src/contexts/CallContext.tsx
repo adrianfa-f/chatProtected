@@ -36,11 +36,22 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
         pc.onicecandidate = (event) => {
+            console.log('[WebRTC] onicecandidate:', event.candidate);
             if (event.candidate) {
                 socket?.emit('webrtc-ice-candidate', {
+                    to: remoteUser?.id,          // <- Incluye el ID del peer destino
                     candidate: event.candidate
                 });
             }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log('[WebRTC] iceConnectionState:', pc.iceConnectionState);
+        };
+
+        pc.ontrack = (event) => {
+            console.log('[WebRTC] ontrack, streams:', event.streams);
+            setRemoteStream(event.streams[0]);
         };
 
         pc.ontrack = (event) => {
@@ -48,7 +59,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         };
 
         return pc;
-    }, [socket]);
+    }, [socket, remoteUser?.id]);
 
     // Memoizar endCall para que tenga una referencia estable
     const endCall = useCallback(() => {

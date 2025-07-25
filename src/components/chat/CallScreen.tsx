@@ -1,10 +1,28 @@
 import { FaPhoneSlash, FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const CallScreen = () => {
-    const { callState, remoteUser, endCall, acceptCall } = useCall();
+    const { callState, remoteUser, endCall, acceptCall, localStream, remoteStream } = useCall();
+    const localAudioRef = useRef<HTMLAudioElement>(null);
+    const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const [isMuted, setIsMuted] = useState(false);
+
+    // Reproducir local (muted para no hacer eco)
+    useEffect(() => {
+        if (localStream && localAudioRef.current) {
+            localAudioRef.current.srcObject = localStream;
+            localAudioRef.current.play().catch(console.warn);
+        }
+    }, [localStream]);
+
+    // Reproducir remoto
+    useEffect(() => {
+        if (remoteStream && remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(console.warn);
+        }
+    }, [remoteStream]);
 
     if (callState === 'idle') return null;
 
@@ -55,6 +73,8 @@ const CallScreen = () => {
                     </div>
                 )}
             </div>
+            <audio ref={localAudioRef} autoPlay muted style={{ display: 'none' }} />
+            <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
         </div>
     );
 };
