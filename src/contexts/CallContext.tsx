@@ -181,7 +181,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             setRemoteUser({ id: userId, username });
             setCallState('calling');
         } catch (error) {
-            console.error('[CallContext] Error al iniciar llamada:', error);
+            console.error('[CallContext] Error al iniciar la llamada:', error);
             endCall();
         }
     }, [socket, setupPeerConnection, endCall]);
