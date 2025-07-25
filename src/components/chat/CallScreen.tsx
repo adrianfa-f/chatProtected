@@ -11,17 +11,21 @@ const CallScreen = () => {
     // Reproducir local (muted para no hacer eco)
     useEffect(() => {
         if (localStream && localRef.current) {
+            console.log('[CallScreen] Configurando stream local');
             localRef.current.srcObject = localStream;
-            localRef.current.play().catch(console.warn);
+            localRef.current.muted = true;
+            localRef.current.play().catch(e => console.warn('Error reproduciendo audio local:', e));
         }
     }, [localStream]);
 
     useEffect(() => {
         if (remoteStream && remoteRef.current) {
+            console.log('[CallScreen] Configurando stream remoto');
             remoteRef.current.srcObject = remoteStream;
-            remoteRef.current.play().catch(console.warn);
+            remoteRef.current.play().catch(e => console.warn('Error reproduciendo audio remoto:', e));
         }
     }, [remoteStream]);
+
 
     if (callState === 'idle') return null;
 

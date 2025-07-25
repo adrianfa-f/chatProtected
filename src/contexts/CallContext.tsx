@@ -27,6 +27,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const pc = new RTCPeerConnection({
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
                 {
                     urls: 'turn:numb.viagenie.ca',
                     username: 'webrtc@live.com',
@@ -34,8 +38,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 }
             ]
         });
+        console.log('[WebRTC] PeerConnection creado');
 
         pc.onicecandidate = (e) => {
+            if (e.candidate) {
+                console.log('[WebRTC] ICE candidate generado:', e.candidate.candidate);
+            } else {
+                console.log('[WebRTC] Todos los ICE candidates han sido enviados');
+            }
             console.log('[WebRTC] onicecandidate →', e.candidate);
             if (e.candidate && remoteUser?.id) {
                 socket?.emit('webrtc-ice-candidate', {
@@ -58,6 +68,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         };
 
         pc.ontrack = (e) => {
+            console.log('[WebRTC] Track recibido:', e.track.kind, 'en stream:', e.streams[0].id);
             console.log('[WebRTC] ontrack ← streams:', e.streams);
             setRemoteStream(e.streams[0]);
         };
