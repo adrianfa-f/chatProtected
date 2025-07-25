@@ -18,6 +18,7 @@ const CallScreen = () => {
     const remoteRef = useRef<HTMLAudioElement>(null);
     const [audioError, setAudioError] = useState<string | null>(null);
     const [remoteTracks, setRemoteTracks] = useState<string[]>([]);
+    const playAttemptRef = useRef<NodeJS.Timeout | null>(null);
 
     // Reproducir audio local
     useEffect(() => {
@@ -26,7 +27,6 @@ const CallScreen = () => {
             localRef.current.srcObject = localStream;
             localRef.current.muted = true;
 
-            // Verificación explícita de null
             localRef.current.play()
                 .then(() => console.log('[Audio] Audio local reproducido'))
                 .catch(e => {
@@ -40,39 +40,48 @@ const CallScreen = () => {
     useEffect(() => {
         if (remoteStream && remoteRef.current) {
             console.log('[CallScreen] Configurando stream remoto');
-            remoteRef.current.srcObject = remoteStream;
 
-            // Guardar referencia en variable para evitar problemas de closure
+            // Clonar el stream para evitar problemas de referencia
+            const clonedStream = new MediaStream(remoteStream.getTracks());
+            remoteRef.current.srcObject = clonedStream;
+
             const audioElement = remoteRef.current;
 
-            const playAudio = async () => {
-                try {
-                    // Verificación de null segura
-                    await audioElement.play();
-                    console.log('[Audio] Audio remoto reproducido con éxito');
+            const playAudio = () => {
+                if (!audioElement) return;
 
-                    setRemoteTracks(remoteStream.getTracks().map(t =>
-                        `${t.kind}:${t.id} (${t.enabled ? 'activo' : 'inactivo'})`
-                    ));
-                } catch (err) {
-                    console.error('[Audio] Error al reproducir audio remoto:', err);
-                    setAudioError('Error reproduciendo audio remoto');
-
-                    const forcePlay = () => {
-                        if (audioElement) {
-                            audioElement.play()
-                                .catch(e => console.warn('[Audio] Error forzado:', e));
+                audioElement.play()
+                    .then(() => {
+                        console.log('[Audio] Audio remoto reproducido con éxito');
+                        if (playAttemptRef.current) {
+                            clearTimeout(playAttemptRef.current);
                         }
-                        document.removeEventListener('click', forcePlay);
-                    };
 
-                    document.addEventListener('click', forcePlay);
-                }
+                        // Aumentar volumen en móviles
+                        if (/(iPhone|iPad|iPod|Android)/i.test(navigator.userAgent)) {
+                            audioElement.volume = 1.0;
+                        }
+                    })
+                    .catch(err => {
+                        console.error('[Audio] Error al reproducir:', err);
+
+                        // Reintentar cada 500ms
+                        playAttemptRef.current = setTimeout(playAudio, 500);
+                    });
             };
 
             playAudio();
         }
     }, [remoteStream]);
+
+    // Limpiar al desmontar
+    useEffect(() => {
+        return () => {
+            if (playAttemptRef.current) {
+                clearTimeout(playAttemptRef.current);
+            }
+        };
+    }, []);
 
     // Verificar estado de conexión periódicamente
     useEffect(() => {
@@ -80,7 +89,6 @@ const CallScreen = () => {
             if (callState === 'in-progress') {
                 console.log('[CallStatus] Estado actual de llamada:', callState);
 
-                // Verificación segura con optional chaining
                 if (remoteRef.current) {
                     console.log('[Audio] Estado audio remoto:',
                         remoteRef.current.paused ? 'pausado' : 'reproduciendo',
@@ -93,6 +101,17 @@ const CallScreen = () => {
 
         return () => clearInterval(interval);
     }, [callState]);
+
+    // Mostrar tracks remotos para depuración
+    useEffect(() => {
+        if (remoteStream) {
+            setRemoteTracks(
+                remoteStream.getTracks().map(t =>
+                    `${t.kind}:${t.id} (${t.enabled ? 'activo' : 'inactivo'})`
+                )
+            );
+        }
+    }, [remoteStream]);
 
     if (callState === 'idle') return null;
 
@@ -111,10 +130,15 @@ const CallScreen = () => {
                         <p className="font-semibold">Error de audio:</p>
                         <p>{audioError}</p>
                         <p className="text-sm mt-1">Haz click en cualquier lugar para intentar reproducir</p>
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="mt-2 px-4 py-2 bg-blue-500 rounded-md"
+                        >
+                            Reintentar Conexión de Audio
+                        </button>
                     </div>
                 )}
 
-                {/* Información de depuración */}
                 {callState === 'in-progress' && remoteTracks.length > 0 && (
                     <div className="mt-4 text-sm bg-gray-800 p-2 rounded-md">
                         <p>Tracks remotos recibidos:</p>
@@ -126,7 +150,6 @@ const CallScreen = () => {
                     </div>
                 )}
 
-                {/* Controles para llamada activa */}
                 {callState === 'in-progress' && (
                     <div className="mt-12 flex justify-center space-x-8">
                         <button
@@ -145,7 +168,6 @@ const CallScreen = () => {
                     </div>
                 )}
 
-                {/* Botones para llamada entrante */}
                 {callState === 'ringing' && (
                     <div className="mt-12 flex justify-center space-x-8">
                         <button
@@ -164,7 +186,6 @@ const CallScreen = () => {
                 )}
             </div>
 
-            {/* Elementos de audio ocultos */}
             <audio ref={localRef} autoPlay muted style={{ display: 'none' }} />
             <audio ref={remoteRef} autoPlay style={{ display: 'none' }} />
         </div>

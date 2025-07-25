@@ -1,6 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { useSocket } from './SocketContext';
 
+declare global {
+    interface Window {
+        webkitAudioContext?: typeof AudioContext;
+    }
+}
+
 interface CallContextType {
     callState: 'idle' | 'calling' | 'ringing' | 'in-progress';
     remoteUser: { id: string; username: string } | null;
@@ -25,12 +31,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const [isMuted, setIsMuted] = useState(false);
     const peerConnection = useRef<RTCPeerConnection | null>(null);
     const iceRestartTimeout = useRef<NodeJS.Timeout | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
 
     const endCall = useCallback(() => {
         // Cancelar reinicios pendientes
         if (iceRestartTimeout.current) {
             clearTimeout(iceRestartTimeout.current);
             iceRestartTimeout.current = null;
+        }
+
+        // Cerrar contexto de audio
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
         }
 
         if (remoteUser) {
@@ -47,16 +60,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             setLocalStream(null);
         }
 
-        setRemoteStream(null);
+        if (remoteStream) {
+            remoteStream.getTracks().forEach(track => track.stop());
+            setRemoteStream(null);
+        }
+
         setRemoteUser(null);
         setCallState('idle');
         setIsMuted(false);
-    }, [remoteUser, socket, localStream]);
+    }, [remoteUser, socket, localStream, remoteStream]);
 
     const restartIce = useCallback(async () => {
         if (!peerConnection.current || !remoteUser) return;
 
-        // Cancelar reinicios pendientes
         if (iceRestartTimeout.current) {
             clearTimeout(iceRestartTimeout.current);
             iceRestartTimeout.current = null;
@@ -73,7 +89,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 iceRestart: true
             });
 
-            // Programar próximo reinicio si sigue fallando
             iceRestartTimeout.current = setTimeout(() => {
                 if (peerConnection.current?.iceConnectionState !== 'connected') {
                     restartIce();
@@ -96,9 +111,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                     urls: 'turn:numb.viagenie.ca',
                     username: 'webrtc@live.com',
                     credential: 'muazkh'
+                },
+                {
+                    urls: 'turn:global.relay.metered.ca:80',
+                    username: 'c13a8f6b6b3f6a7f3e9d0d7c',
+                    credential: '1B+5CJkTPqly1P4I'
                 }
             ],
-            iceTransportPolicy: 'all'
+            iceTransportPolicy: 'all',
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require'
         });
 
         pc.onicecandidate = (e) => {
@@ -132,12 +154,22 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             console.log('[WebRTC] Track recibido:', e.track.kind, 'en stream:', e.streams);
             if (e.streams && e.streams.length > 0) {
                 console.log('[WebRTC] Configurando stream remoto con ID:', e.streams[0].id);
-                setRemoteStream(e.streams[0]);
+
+                // Clonar el stream para evitar problemas de referencia
+                const clonedStream = new MediaStream(e.streams[0].getTracks());
+                setRemoteStream(clonedStream);
+
+                // Inicializar contexto de audio si no existe
+                if (!audioContextRef.current) {
+                    audioContextRef.current = new (window.AudioContext || (window as Window).webkitAudioContext)();
+                }
             }
         };
 
         return pc;
     }, [socket, remoteUser?.id, restartIce]);
+
+
 
     const acceptCall = useCallback(() => {
         if (remoteUser) {
@@ -149,7 +181,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         if (!socket) return;
 
-        socket.on('incoming-call', ({ from, username }) => {
+        const handleIncomingCall = ({ from, username }: { from: string; username: string }) => {
             // Rechazar automáticamente si ya está en otra llamada
             if (callState !== 'idle') {
                 socket.emit('call-ended', { to: from });
@@ -158,9 +190,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
             setRemoteUser({ id: from, username });
             setCallState('ringing');
-        });
+        };
 
-        socket.on('webrtc-offer', async ({ from, offer, iceRestart }) => {
+        const handleWebRTCOffer = async ({ from, offer, iceRestart }:
+            { from: string; offer: RTCSessionDescriptionInit; iceRestart?: boolean }) => {
             try {
                 if (callState !== 'ringing' && !iceRestart) return;
 
@@ -168,13 +201,17 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                     // Detener stream existente
                     if (localStream) {
                         localStream.getTracks().forEach(track => track.stop());
+                        setLocalStream(null);
                     }
 
                     const stream = await navigator.mediaDevices.getUserMedia({
                         audio: {
                             echoCancellation: true,
                             noiseSuppression: true,
-                            autoGainControl: true
+                            autoGainControl: true,
+                            channelCount: 1,
+                            sampleRate: 16000,
+                            sampleSize: 16
                         }
                     });
                     setLocalStream(stream);
@@ -191,6 +228,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 const pc = peerConnection.current;
 
                 if (!iceRestart && localStream) {
+                    // Añadir tracks locales
                     localStream.getTracks().forEach(track => {
                         console.log(`[WebRTC] Añadiendo track local: ${track.kind}`);
                         pc.addTrack(track, localStream);
@@ -212,9 +250,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 console.error('[CallContext] Error al manejar oferta:', err);
                 endCall();
             }
-        });
+        };
 
-        socket.on('webrtc-answer', async ({ answer }) => {
+        const handleWebRTCAnswer = async ({ answer }:
+            { answer: RTCSessionDescriptionInit; from: string }) => {
             try {
                 const pc = peerConnection.current;
                 if (!pc) return;
@@ -226,9 +265,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 console.error('[CallContext] Error al aplicar respuesta:', err);
                 endCall();
             }
-        });
+        };
 
-        socket.on('webrtc-ice-candidate', async ({ candidate, from }) => {
+        const handleWebRTCIceCandidate = async ({ candidate, from }:
+            { candidate: RTCIceCandidateInit; from: string }) => {
             console.log('[WebRTC] ICE candidate recibido de', from, candidate);
 
             // Solo procesar candidatos del usuario actual
@@ -242,31 +282,48 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             } catch (err) {
                 console.error('[WebRTC] Error añadiendo candidate:', err);
             }
-        });
+        };
 
-        socket.on('call-accepted', () => {
+        const handleCallAccepted = () => {
             setCallState('in-progress');
-        });
+        };
 
-        socket.on('call-ended', () => {
+        const handleCallEnded = () => {
             endCall();
-        });
+        };
 
-        socket.on('proceed-with-webrtc', () => {
+        const handleProceedWithWebRTC = () => {
             if (peerConnection.current) {
                 console.log('[WebRTC] Procediendo con conexión WebRTC');
                 restartIce();
             }
-        });
+        };
+
+        const handlePeerDisconnected = ({ userId }: { userId: string }) => {
+            if (remoteUser?.id === userId) {
+                console.log('[WebRTC] Peer desconectado, terminando llamada');
+                endCall();
+            }
+        };
+
+        socket.on('incoming-call', handleIncomingCall);
+        socket.on('webrtc-offer', handleWebRTCOffer);
+        socket.on('webrtc-answer', handleWebRTCAnswer);
+        socket.on('webrtc-ice-candidate', handleWebRTCIceCandidate);
+        socket.on('call-accepted', handleCallAccepted);
+        socket.on('call-ended', handleCallEnded);
+        socket.on('proceed-with-webrtc', handleProceedWithWebRTC);
+        socket.on('peer-disconnected', handlePeerDisconnected);
 
         return () => {
-            socket.off('incoming-call');
-            socket.off('webrtc-offer');
-            socket.off('webrtc-answer');
-            socket.off('webrtc-ice-candidate');
-            socket.off('call-accepted');
-            socket.off('call-ended');
-            socket.off('proceed-with-webrtc');
+            socket.off('incoming-call', handleIncomingCall);
+            socket.off('webrtc-offer', handleWebRTCOffer);
+            socket.off('webrtc-answer', handleWebRTCAnswer);
+            socket.off('webrtc-ice-candidate', handleWebRTCIceCandidate);
+            socket.off('call-accepted', handleCallAccepted);
+            socket.off('call-ended', handleCallEnded);
+            socket.off('proceed-with-webrtc', handleProceedWithWebRTC);
+            socket.off('peer-disconnected', handlePeerDisconnected);
         };
     }, [socket, setupPeerConnection, endCall, localStream, callState, remoteUser?.id, restartIce]);
 
@@ -289,7 +346,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true
+                    autoGainControl: true,
+                    channelCount: 1,
+                    sampleRate: 16000,
+                    sampleSize: 16
                 }
             });
             setLocalStream(stream);
@@ -297,6 +357,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             const pc = setupPeerConnection();
             peerConnection.current = pc;
 
+            // Añadir tracks locales
             stream.getTracks().forEach(track => {
                 console.log(`[WebRTC] Añadiendo track local (caller): ${track.kind}`);
                 pc.addTrack(track, stream);
