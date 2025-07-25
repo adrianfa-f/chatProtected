@@ -14,13 +14,6 @@ interface CallContextType {
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
 
-/* eslint-disable-next-line react-refresh/only-export-components */
-export const useCall = () => {
-    const context = useContext(CallContext);
-    if (!context) throw new Error('useCall must be used within a CallProvider');
-    return context;
-};
-
 export const CallProvider = ({ children }: { children: ReactNode }) => {
     const socket = useSocket();
     const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'in-progress'>('idle');
@@ -114,41 +107,65 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
         // Oferta recibida
+        // 1) Al recibir la OFFER
         socket.on('webrtc-offer', async ({ from, offer }) => {
             try {
-                // Solo inicializamos el stream si estamos en estado 'ringing'
-                if (callState === 'ringing') {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    setLocalStream(stream);
+                if (callState !== 'ringing') return;
 
-                    const pc = setupPeerConnection();
-                    peerConnection.current = pc;
-                    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                // 1.1) Pedir el audio local y guardarlo
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                setLocalStream(stream);
 
-                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
+                // 1.2) Crear / configurar el peerConnection
+                const pc = setupPeerConnection();
+                peerConnection.current = pc;
 
-                    socket.emit('webrtc-answer', { to: from, answer });
-                }
+                // 1.3) Añadir tracks locales
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                // 1.4) Registrar ontrack para recibir el audio remoto
+                pc.ontrack = event => {
+                    console.log('[CallContext] ontrack recibido', event.streams);
+                    setRemoteStream(event.streams[0]);
+                };
+
+                // 1.5) Aplicar la oferta y crear la respuesta
+                await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // 1.6) Enviar la respuesta de vuelta
+                socket.emit('webrtc-answer', { to: from, answer });
             } catch (err) {
                 console.error('[CallContext] Error al manejar oferta:', err);
                 endCall();
             }
         });
 
-        // Respuesta recibida
+
+        // 2) Al recibir la ANSWER
         socket.on('webrtc-answer', async ({ answer }) => {
             try {
-                if (peerConnection.current) {
-                    await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
-                    setCallState('in-progress');
-                }
+                const pc = peerConnection.current;
+                if (!pc) return;
+
+                // 2.1) Registrar también ontrack aquí (caller side)
+                pc.ontrack = event => {
+                    console.log('[CallContext] ontrack recibido (caller)', event.streams);
+                    setRemoteStream(event.streams[0]);
+                };
+
+                // 2.2) Aplicar la respuesta remota
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+                // 2.3) Ya estamos en progreso
+                setCallState('in-progress');
             } catch (err) {
                 console.error('[CallContext] Error al aplicar respuesta:', err);
                 endCall();
             }
         });
+
 
         // ICE candidate
         socket.on('webrtc-ice-candidate', async ({ from, candidate }) => {
@@ -216,4 +233,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             {children}
         </CallContext.Provider>
     );
+};
+
+/* eslint-disable-next-line react-refresh/only-export-components */
+export const useCall = () => {
+    const context = useContext(CallContext);
+    if (!context) throw new Error('useCall must be used within a CallProvider');
+    return context;
 };
