@@ -32,30 +32,41 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     const setupPeerConnection = useCallback(() => {
         const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                {
+                    urls: 'turn:numb.viagenie.ca',
+                    username: 'webrtc@live.com',
+                    credential: 'muazkh'
+                }
+            ]
         });
 
-        pc.onicecandidate = (event) => {
-            console.log('[WebRTC] onicecandidate:', event.candidate);
-            if (event.candidate) {
+        pc.onicecandidate = (e) => {
+            console.log('[WebRTC] onicecandidate →', e.candidate);
+            if (e.candidate && remoteUser?.id) {
                 socket?.emit('webrtc-ice-candidate', {
-                    to: remoteUser?.id,          // <- Incluye el ID del peer destino
-                    candidate: event.candidate
+                    to: remoteUser.id,
+                    candidate: e.candidate
                 });
             }
         };
 
+        pc.onicegatheringstatechange = () => {
+            console.log('[WebRTC] iceGatheringState →', pc.iceGatheringState);
+        };
+
         pc.oniceconnectionstatechange = () => {
-            console.log('[WebRTC] iceConnectionState:', pc.iceConnectionState);
+            console.log('[WebRTC] iceConnectionState →', pc.iceConnectionState);
         };
 
-        pc.ontrack = (event) => {
-            console.log('[WebRTC] ontrack, streams:', event.streams);
-            setRemoteStream(event.streams[0]);
+        pc.onsignalingstatechange = () => {
+            console.log('[WebRTC] signalingState →', pc.signalingState);
         };
 
-        pc.ontrack = (event) => {
-            setRemoteStream(event.streams[0]);
+        pc.ontrack = (e) => {
+            console.log('[WebRTC] ontrack ← streams:', e.streams);
+            setRemoteStream(e.streams[0]);
         };
 
         return pc;
@@ -140,13 +151,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
         // ICE candidate
-        socket.on('webrtc-ice-candidate', async ({ candidate }) => {
-            try {
-                if (peerConnection.current) {
+        socket.on('webrtc-ice-candidate', async ({ from, candidate }) => {
+            console.log('[WebRTC] ICE candidate recibido de', from, candidate);
+            if (peerConnection.current) {
+                try {
                     await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log('[WebRTC] Candidate añadido');
+                } catch (err) {
+                    console.error('[WebRTC] Error añadiendo candidate:', err);
                 }
-            } catch (err) {
-                console.error('[CallContext] Error al agregar ICE candidate:', err);
             }
         });
 
@@ -172,30 +185,22 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     // Memoizar startCall para consistencia
     const startCall = useCallback(async (userId: string, username: string) => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            setLocalStream(stream);
+        setRemoteUser({ id: userId, username });
+        setCallState('calling');
 
-            const pc = setupPeerConnection();
-            peerConnection.current = pc;
-            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setLocalStream(stream);
 
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
+        const pc = setupPeerConnection();
+        peerConnection.current = pc;
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-            // Notificar al destinatario sobre la llamada entrante
-            socket?.emit('incoming-call', { to: userId, username });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-            // Enviar la oferta WebRTC
-            socket?.emit('webrtc-offer', { to: userId, offer });
-
-            setRemoteUser({ id: userId, username });
-            setCallState('calling');
-        } catch (error) {
-            console.error('[CallContext] Error al iniciar la llamada:', error);
-            endCall();
-        }
-    }, [socket, setupPeerConnection, endCall]);
+        socket?.emit('incoming-call', { to: userId, username });
+        socket?.emit('webrtc-offer', { to: userId, offer });
+    }, [setupPeerConnection, socket, setRemoteUser, setCallState]);
 
     return (
         <CallContext.Provider value={{

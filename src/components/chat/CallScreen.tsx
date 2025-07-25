@@ -4,23 +4,22 @@ import { useEffect, useRef, useState } from 'react';
 
 const CallScreen = () => {
     const { callState, remoteUser, endCall, acceptCall, localStream, remoteStream } = useCall();
-    const localAudioRef = useRef<HTMLAudioElement>(null);
-    const remoteAudioRef = useRef<HTMLAudioElement>(null);
+    const localRef = useRef<HTMLAudioElement>(null);
+    const remoteRef = useRef<HTMLAudioElement>(null);
     const [isMuted, setIsMuted] = useState(false);
 
     // Reproducir local (muted para no hacer eco)
     useEffect(() => {
-        if (localStream && localAudioRef.current) {
-            localAudioRef.current.srcObject = localStream;
-            localAudioRef.current.play().catch(console.warn);
+        if (localStream && localRef.current) {
+            localRef.current.srcObject = localStream;
+            localRef.current.play().catch(console.warn);
         }
     }, [localStream]);
 
-    // Reproducir remoto
     useEffect(() => {
-        if (remoteStream && remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = remoteStream;
-            remoteAudioRef.current.play().catch(console.warn);
+        if (remoteStream && remoteRef.current) {
+            remoteRef.current.srcObject = remoteStream;
+            remoteRef.current.play().catch(console.warn);
         }
     }, [remoteStream]);
 
@@ -73,8 +72,8 @@ const CallScreen = () => {
                     </div>
                 )}
             </div>
-            <audio ref={localAudioRef} autoPlay muted style={{ display: 'none' }} />
-            <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
+            <audio ref={localRef} autoPlay muted style={{ display: 'none' }} />
+            <audio ref={remoteRef} autoPlay style={{ display: 'none' }} />
         </div>
     );
 };
