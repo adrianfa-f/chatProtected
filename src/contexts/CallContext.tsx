@@ -100,6 +100,18 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [socket, remoteUser, endCall]);
 
+    const verifyMicrophoneAccess = async () => {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const hasMicrophone = devices.some(device => device.kind === 'audioinput');
+            console.log('[Audio] Micrófonos disponibles:', hasMicrophone);
+            return hasMicrophone;
+        } catch (error) {
+            console.error('[Audio] Error verificando dispositivos:', error);
+            return false;
+        }
+    };
+
     const setupPeerConnection = useCallback(() => {
         const pc = new RTCPeerConnection({
             iceServers: [
@@ -151,7 +163,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         };
 
         pc.ontrack = (e) => {
-            console.log('[WebRTC] Track recibido:', e.track.kind, 'en stream:', e.streams);
+            console.log('[WebRTC] Track recibido:', e.track.kind,
+                'Estado:', e.track.readyState,
+                'Habilitado:', e.track.enabled);
             if (e.streams && e.streams.length > 0) {
                 console.log('[WebRTC] Configurando stream remoto con ID:', e.streams[0].id);
 
@@ -165,6 +179,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 }
             }
         };
+
+        pc.onnegotiationneeded = (e) => {
+            console.log('[WebRTC] Negociación necesaria', e.target);
+        };
+
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
 
         return pc;
     }, [socket, remoteUser?.id, restartIce]);
@@ -195,9 +215,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const handleWebRTCOffer = async ({ from, offer, iceRestart }:
             { from: string; offer: RTCSessionDescriptionInit; iceRestart?: boolean }) => {
             try {
-                if (callState !== 'ringing' && !iceRestart) return;
+                if (callState !== 'ringing' && callState !== 'in-progress' && !iceRestart) return;
 
                 if (!iceRestart) {
+                    const hasMic = await verifyMicrophoneAccess();
+                    if (!hasMic) {
+                        console.error('[Audio] No hay micrófonos disponibles (callee)');
+                        endCall();
+                        return;
+                    }
                     // Detener stream existente
                     if (localStream) {
                         localStream.getTracks().forEach(track => track.stop());
@@ -231,7 +257,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                     // Añadir tracks locales
                     localStream.getTracks().forEach(track => {
                         console.log(`[WebRTC] Añadiendo track local: ${track.kind}`);
-                        pc.addTrack(track, localStream);
+                        const sender = pc.addTrack(track, localStream);
+                        console.log(`[WebRTC] Track local añadido (callee): ${track.kind}`, sender);
                     });
                 }
 
@@ -341,6 +368,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         setRemoteUser({ id: userId, username });
         setCallState('calling');
 
+        const hasMic = await verifyMicrophoneAccess();
+        if (!hasMic) {
+            console.error('[Audio] No se detectaron micrófonos disponibles');
+            endCall();
+            return;
+        }
+
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
@@ -359,8 +394,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
             // Añadir tracks locales
             stream.getTracks().forEach(track => {
-                console.log(`[WebRTC] Añadiendo track local (caller): ${track.kind}`);
-                pc.addTrack(track, stream);
+                // Usar addTransceiver en lugar de addTrack
+                const sender = pc.addTrack(track, stream);
+                console.log(`[WebRTC] Track local añadido: ${track.kind}`, sender);
             });
 
             const offer = await pc.createOffer({

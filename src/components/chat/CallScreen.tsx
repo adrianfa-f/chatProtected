@@ -40,12 +40,10 @@ const CallScreen = () => {
     useEffect(() => {
         if (remoteStream && remoteRef.current) {
             console.log('[CallScreen] Configurando stream remoto');
-
-            // Clonar el stream para evitar problemas de referencia
-            const clonedStream = new MediaStream(remoteStream.getTracks());
-            remoteRef.current.srcObject = clonedStream;
-
             const audioElement = remoteRef.current;
+
+            // Capturar el valor actual del ref en una variable
+            let currentPlayAttempt = playAttemptRef.current;
 
             const playAudio = () => {
                 if (!audioElement) return;
@@ -53,10 +51,9 @@ const CallScreen = () => {
                 audioElement.play()
                     .then(() => {
                         console.log('[Audio] Audio remoto reproducido con éxito');
-                        if (playAttemptRef.current) {
-                            clearTimeout(playAttemptRef.current);
+                        if (currentPlayAttempt) {
+                            clearTimeout(currentPlayAttempt);
                         }
-
                         // Aumentar volumen en móviles
                         if (/(iPhone|iPad|iPod|Android)/i.test(navigator.userAgent)) {
                             audioElement.volume = 1.0;
@@ -64,13 +61,23 @@ const CallScreen = () => {
                     })
                     .catch(err => {
                         console.error('[Audio] Error al reproducir:', err);
-
-                        // Reintentar cada 500ms
-                        playAttemptRef.current = setTimeout(playAudio, 500);
+                        // Reintentar usando la variable capturada
+                        currentPlayAttempt = setTimeout(playAudio, 500);
+                        playAttemptRef.current = currentPlayAttempt;
                     });
             };
 
+            // Clonar el stream
+            const clonedStream = new MediaStream(remoteStream.getTracks());
+            audioElement.srcObject = clonedStream;
             playAudio();
+
+            return () => {
+                // Limpiar usando la variable capturada
+                if (currentPlayAttempt) {
+                    clearTimeout(currentPlayAttempt);
+                }
+            };
         }
     }, [remoteStream]);
 
