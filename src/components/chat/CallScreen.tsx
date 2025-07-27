@@ -1,3 +1,4 @@
+// src/components/CallScreen.tsx
 import { FaPhoneSlash, FaMicrophone, FaMicrophoneSlash } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 import { useEffect, useRef, useState } from 'react';
@@ -20,29 +21,6 @@ const CallScreen = () => {
     const [remoteTracks, setRemoteTracks] = useState<string[]>([]);
     const playAttemptRef = useRef<NodeJS.Timeout | null>(null);
 
-    useEffect(() => {
-        const handleUserInteraction = async () => {
-            if (remoteRef.current && remoteRef.current.paused) {
-                try {
-                    await remoteRef.current.play();
-                    setAudioError(null);
-                } catch (e) {
-                    console.log("Error en iteracion de audio: ", e)
-                    setAudioError('Se requiere interacción del usuario para activar audio');
-                }
-            }
-        };
-
-        // Intentar reproducir en eventos de interacción
-        window.addEventListener('click', handleUserInteraction);
-        window.addEventListener('touchstart', handleUserInteraction);
-
-        return () => {
-            window.removeEventListener('click', handleUserInteraction);
-            window.removeEventListener('touchstart', handleUserInteraction);
-        };
-    }, []);
-
     // Reproducir audio local
     useEffect(() => {
         if (localStream && localRef.current) {
@@ -59,35 +37,29 @@ const CallScreen = () => {
         }
     }, [localStream]);
 
-    // Reproducir audio remoto
+    // Reproducir audio remoto con manejo de errores robusto
     useEffect(() => {
         if (remoteStream && remoteRef.current) {
             console.log('[CallScreen] Configurando stream remoto');
             const audioElement = remoteRef.current;
 
-            // Capturar el valor actual del ref en una variable
-            let currentPlayAttempt = playAttemptRef.current;
-
-            const playAudio = () => {
-                if (!audioElement) return;
-
-                audioElement.play()
-                    .then(() => {
-                        console.log('[Audio] Audio remoto reproducido con éxito');
-                        if (currentPlayAttempt) {
-                            clearTimeout(currentPlayAttempt);
-                        }
-                        // Aumentar volumen en móviles
-                        if (/(iPhone|iPad|iPod|Android)/i.test(navigator.userAgent)) {
-                            audioElement.volume = 1.0;
-                        }
-                    })
-                    .catch(err => {
-                        console.error('[Audio] Error al reproducir:', err);
-                        // Reintentar usando la variable capturada
-                        currentPlayAttempt = setTimeout(playAudio, 500);
-                        playAttemptRef.current = currentPlayAttempt;
-                    });
+            const playAudio = async () => {
+                try {
+                    await audioElement.play();
+                    console.log('[Audio] Audio remoto reproducido con éxito');
+                    if (playAttemptRef.current) {
+                        clearTimeout(playAttemptRef.current);
+                        playAttemptRef.current = null;
+                    }
+                    // Aumentar volumen en móviles
+                    if (/(iPhone|iPad|iPod|Android)/i.test(navigator.userAgent)) {
+                        audioElement.volume = 1.0;
+                    }
+                } catch (err) {
+                    console.error('[Audio] Error al reproducir:', err);
+                    // Reintentar solo si no es un error de interrupción
+                    playAttemptRef.current = setTimeout(playAudio, 500);
+                }
             };
 
             // Clonar el stream
@@ -96,9 +68,9 @@ const CallScreen = () => {
             playAudio();
 
             return () => {
-                // Limpiar usando la variable capturada
-                if (currentPlayAttempt) {
-                    clearTimeout(currentPlayAttempt);
+                if (playAttemptRef.current) {
+                    clearTimeout(playAttemptRef.current);
+                    playAttemptRef.current = null;
                 }
             };
         }
@@ -143,20 +115,26 @@ const CallScreen = () => {
         }
     }, [remoteStream]);
 
+    // Manejar interacción del usuario para activar audio (requerido en iOS/Android)
     useEffect(() => {
-        const handlePlayError = async () => {
+        const handleUserInteraction = async () => {
             if (remoteRef.current && remoteRef.current.paused) {
                 try {
                     await remoteRef.current.play();
-                } catch (err) {
-                    console.error('Error de reproducción remota:', err);
-                    setAudioError('Error de audio. Toca para reintentar');
+                    setAudioError(null);
+                } catch {
+                    setAudioError('Se requiere interacción del usuario para activar audio');
                 }
             }
         };
 
-        const interval = setInterval(handlePlayError, 3000);
-        return () => clearInterval(interval);
+        window.addEventListener('click', handleUserInteraction);
+        window.addEventListener('touchstart', handleUserInteraction);
+
+        return () => {
+            window.removeEventListener('click', handleUserInteraction);
+            window.removeEventListener('touchstart', handleUserInteraction);
+        };
     }, []);
 
     if (callState === 'idle') return null;
@@ -176,12 +154,6 @@ const CallScreen = () => {
                         <p className="font-semibold">Error de audio:</p>
                         <p>{audioError}</p>
                         <p className="text-sm mt-1">Haz click en cualquier lugar para intentar reproducir</p>
-                        <button
-                            onClick={() => window.location.reload()}
-                            className="mt-2 px-4 py-2 bg-blue-500 rounded-md"
-                        >
-                            Reintentar Conexión de Audio
-                        </button>
                     </div>
                 )}
 
@@ -236,28 +208,9 @@ const CallScreen = () => {
             <audio
                 ref={remoteRef}
                 autoPlay
-                playsInline  // Agregar esto
+                playsInline  // Necesario para iOS
                 style={{ display: 'none' }}
-                onCanPlay={() => {
-                    remoteRef.current?.play().catch(e =>
-                        console.error('Error autoplay:', e)
-                    );
-                }}
             />
-            {audioError && (
-                <button
-                    onClick={() => {
-                        if (remoteRef.current) {
-                            remoteRef.current.play().catch(e =>
-                                console.error('Error al reintentar:', e)
-                            );
-                        }
-                    }}
-                    className="mt-4 px-4 py-2 bg-blue-500 rounded-md"
-                >
-                    Activar Audio
-                </button>
-            )}
         </div>
     );
 };

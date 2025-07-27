@@ -1,5 +1,4 @@
 // src/contexts/CallContext.tsx
-
 import React, {
     createContext,
     useCallback,
@@ -36,6 +35,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'in-progress'>('idle');
     const [remoteUser, setRemoteUser] = useState<{ id: string; username: string } | null>(null);
     const remoteUserRef = useRef(remoteUser);
+    const socketRef = useRef(socket);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -45,16 +45,11 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     const audioContextRef = useRef<AudioContext | null>(null);
 
     const isCallIncoming = useRef(false);
-    const socketRef = useRef(socket);
-
-    useEffect(() => {
-        socketRef.current = socket;
-    }, [socket]);
-
 
     useEffect(() => {
         remoteUserRef.current = remoteUser;
-    }, [remoteUser]);
+        socketRef.current = socket;
+    }, [remoteUser, socket]);
 
     const endCall = useCallback(() => {
         console.log('[Call] Finalizando llamada...');
@@ -76,8 +71,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         // D. Notificar al otro usuario (si existe)
-        if (remoteUser) {
-            socket?.emit('call-ended', { to: remoteUser.id });
+        if (remoteUserRef.current) {
+            socketRef.current?.emit('call-ended', { to: remoteUserRef.current.id });
         }
 
         // E. Cerrar conexión peer
@@ -115,12 +110,13 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         remoteUserRef.current = null;
 
         console.log('[Call] Llamada finalizada completamente');
-    }, [remoteUser, socket, localStream, remoteStream]);
+    }, [localStream, remoteStream]);
 
     const restartIce = useCallback(async () => {
-        if (!peerConnection.current || !remoteUser) return;
+        if (!peerConnection.current || !remoteUserRef.current) return;
 
-        if (peerConnection.current.iceConnectionState === 'connected') {
+        if (peerConnection.current.iceConnectionState === 'connected' ||
+            peerConnection.current.iceConnectionState === 'completed') {
             console.log('[WebRTC] ICE ya conectado, omitiendo reinicio');
             return;
         }
@@ -135,8 +131,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             const offer = await peerConnection.current.createOffer({ iceRestart: true });
             await peerConnection.current.setLocalDescription(offer);
 
-            socket?.emit('webrtc-offer', {
-                to: remoteUser.id,
+            socketRef.current?.emit('webrtc-offer', {
+                to: remoteUserRef.current.id,
                 offer,
                 iceRestart: true
             });
@@ -151,7 +147,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             console.error('[WebRTC] Error al reiniciar ICE:', err);
             endCall();
         }
-    }, [socket, remoteUser, endCall]);
+    }, [endCall]);
 
     const verifyMicrophoneAccess = async () => {
         try {
@@ -161,6 +157,31 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             console.error('[Audio] Error verificando dispositivos:', error);
             return false;
         }
+    };
+
+    const waitForICEGathering = (pc: RTCPeerConnection) => {
+        return new Promise<void>((resolve) => {
+            if (pc.iceGatheringState === 'complete') {
+                resolve();
+                return;
+            }
+
+            const checkState = () => {
+                if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                }
+            };
+
+            pc.addEventListener('icegatheringstatechange', checkState);
+
+            // Timeout de reserva para redes problemáticas
+            setTimeout(() => {
+                pc.removeEventListener('icegatheringstatechange', checkState);
+                console.warn('[WebRTC] ICE gathering timeout, procediendo con candidatos incompletos');
+                resolve();
+            }, 10000); // 10 segundos máximo
+        });
     };
 
     const setupPeerConnection = useCallback(() => {
@@ -183,15 +204,16 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             ],
             iceTransportPolicy: 'all',
             bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require'
+            rtcpMuxPolicy: 'require',
+            iceCandidatePoolSize: 5
         });
 
         // envío de candidates ICE tras setLocalDescription
         pc.onicecandidate = (e) => {
-            if (e.candidate && remoteUser?.id) {
+            if (e.candidate && remoteUserRef.current) {
                 console.log('[ICE] Enviando candidato:', e.candidate);
-                socket?.emit('webrtc-ice-candidate', {
-                    to: remoteUser.id,
+                socketRef.current?.emit('webrtc-ice-candidate', {
+                    to: remoteUserRef.current.id,
                     candidate: e.candidate
                 });
             }
@@ -210,7 +232,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             // Manejar reconexión con timeout
             if (pc.iceConnectionState === 'disconnected') {
                 setTimeout(() => {
-                    if (pc.iceConnectionState !== 'connected') {
+                    if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
                         console.error('[WebRTC] Reconexión fallida, reiniciando ICE...');
                         restartIce();
                     }
@@ -246,7 +268,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 await pc.setLocalDescription(offer);
 
                 socketRef.current?.emit('webrtc-offer', {
-                    to: remoteUserRef.current.id,
+                    to: remoteUserRef.current.id, // Usar ref aquí
                     offer,
                     iceRestart: false
                 });
@@ -275,14 +297,14 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         };
 
         return pc;
-    }, [socket, restartIce, remoteUser, remoteStream]);
+    }, [restartIce, remoteStream]);
 
     const acceptCall = useCallback(() => {
-        if (remoteUser) {
-            socket?.emit('call-accepted', { to: remoteUser.id });
+        if (remoteUserRef.current) {
+            socketRef.current?.emit('call-accepted', { to: remoteUserRef.current.id });
             setCallState('in-progress');
         }
-    }, [remoteUser, socket]);
+    }, []);
 
     useEffect(() => {
         if (!socket) return;
@@ -333,7 +355,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         }) => {
             try {
                 // 1. Validar usuario remoto
-                if (!remoteUser) {
+                if (!remoteUserRef.current) {
                     console.warn('[WebRTC] Offer recibida sin remoteUser. Creando temporal...');
                     setRemoteUser({ id: from, username: 'Usuario Temporal' });
                 }
@@ -366,26 +388,23 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                     console.log('[WebRTC] Creando answer');
                     const answer = await pc.createAnswer();
 
-                    // Esperar ICE gathering (vital para estabilidad)
-                    await new Promise<void>((resolve) => {
-                        if (pc.iceGatheringState === 'complete') {
-                            resolve();
-                        } else {
-                            const handler = () => {
-                                if (pc.iceGatheringState === 'complete') {
-                                    pc.removeEventListener('icegatheringstatechange', handler);
-                                    resolve();
-                                }
-                            };
-                            pc.addEventListener('icegatheringstatechange', handler);
-                        }
-                    });
-
-                    // 6. Establecer y enviar respuesta
-                    console.log('[WebRTC] Setting localDescription (answer)');
+                    // Establecer descripción local INMEDIATAMENTE
                     await pc.setLocalDescription(answer);
-                    console.log('[WebRTC] Enviando answer');
-                    socket?.emit('webrtc-answer', { to: from, answer });
+                    console.log('[WebRTC] Setting localDescription (answer)');
+
+                    // Enviar respuesta INMEDIATAMENTE
+                    socketRef.current?.emit('webrtc-answer', { to: from, answer });
+                    console.log('[WebRTC] Answer enviado');
+
+                    // Esperar ICE gathering en segundo plano
+                    waitForICEGathering(pc).then(() => {
+                        if (pc.localDescription) {
+                            socketRef.current?.emit('webrtc-answer', {
+                                to: from,
+                                answer: pc.localDescription
+                            });
+                        }
+                    }).catch(console.error);
                 }
             } catch (err) {
                 console.error('[CallContext] Error al manejar oferta:', err);
@@ -408,7 +427,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         };
 
         const handleWebRTCIceCandidate = async ({ candidate, from }: { candidate: RTCIceCandidateInit; from: string }) => {
-            if (!peerConnection.current || !candidate || remoteUser?.id !== from) return;
+            if (!peerConnection.current || !candidate) return;
             try {
                 console.log('[WebRTC] ICE candidate recibido de', from, candidate);
                 await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
@@ -424,7 +443,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             if (peerConnection.current) restartIce();
         };
         const handlePeerDisconnected = ({ userId }: { userId: string }) => {
-            if (remoteUser?.id === userId) {
+            if (remoteUserRef.current?.id === userId) {
                 endCall();
             }
         };
@@ -448,14 +467,14 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             socket.off('proceed-with-webrtc', handleProceedWithWebRTC);
             socket.off('peer-disconnected', handlePeerDisconnected);
         };
-    }, [socket, setupPeerConnection, endCall, localStream, callState, remoteUser?.id, restartIce, remoteUser]);
+    }, [socket, setupPeerConnection, endCall, localStream, callState, restartIce]);
 
     const startCall = useCallback(async (userId: string, username: string) => {
         // Usar ref para mantener el userId durante la operación asíncrona
         const targetUserId = userId;
         const targetUsername = username;
 
-        remoteUserRef.current = { id: userId, username };
+        remoteUserRef.current = { id: userId, username: username };
 
         // 1. Limpieza inicial
         if (peerConnection.current) {
@@ -518,40 +537,32 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 offerToReceiveVideo: false
             });
 
-            // 9. Esperar ICE gathering (CRÍTICO para Android)
-            await new Promise<void>((resolve, reject) => {
-                if (pc.iceGatheringState === 'complete') {
-                    resolve();
-                } else {
-                    const timeout = setTimeout(() => {
-                        pc.removeEventListener('icegatheringstatechange', handler);
-                        reject(new Error('Tiempo de espera para ICE gathering excedido'));
-                    }, 10000); // 10 segundos timeout
-
-                    const handler = () => {
-                        if (pc.iceGatheringState === 'complete') {
-                            clearTimeout(timeout);
-                            pc.removeEventListener('icegatheringstatechange', handler);
-                            resolve();
-                        }
-                    };
-
-                    pc.addEventListener('icegatheringstatechange', handler);
-                }
-            });
-
-            // 10. Establecer descripción local
+            // 9. Establecer descripción local INMEDIATAMENTE
             await pc.setLocalDescription(offer);
             console.log('[WebRTC] Oferta local creada:', offer.sdp);
 
-            // 11. Enviar eventos
-            socket?.emit('incoming-call', { to: targetUserId, username: targetUsername });
-            socket?.emit('webrtc-offer', { to: targetUserId, offer });
+            // 10. Enviar eventos INMEDIATAMENTE (sin esperar ICE gathering)
+            socketRef.current?.emit('incoming-call', { to: targetUserId, username: targetUsername });
+            socketRef.current?.emit('webrtc-offer', { to: targetUserId, offer });
+
+            // 11. Esperar ICE gathering en segundo plano
+            waitForICEGathering(pc).then(() => {
+                console.log('[WebRTC] ICE gathering completado');
+                // Reenviar oferta si es necesario
+                if (pc.localDescription) {
+                    socketRef.current?.emit('webrtc-offer', {
+                        to: targetUserId,
+                        offer: pc.localDescription,
+                        iceRestart: false
+                    });
+                }
+            }).catch(console.error);
+
         } catch (err) {
             console.error('[CallContext] Error al iniciar llamada:', err);
             endCall();
         }
-    }, [setupPeerConnection, socket, endCall, localStream]);
+    }, [setupPeerConnection, endCall, localStream]);
 
     const toggleMute = useCallback(() => {
         if (localStream) {
