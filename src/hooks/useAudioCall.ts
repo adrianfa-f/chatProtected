@@ -1,80 +1,70 @@
 // src/hooks/useAudioCall.ts
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSocket } from '../contexts/SocketContext';
-import { useAuth } from '../contexts/AuthContext';
 import { getLocalAudio } from '../utils/media';
 import { RTC_CONFIGURATION } from '../config/webrtc';
 
-/** Lo que recibo del socket cuando alguien me llama / responde / envía candidate */
-type ReceiveOffer = { from: string; sdp: RTCSessionDescriptionInit };
-type ReceiveAnswer = { from: string; sdp: RTCSessionDescriptionInit };
-type ReceiveIce = { from: string; candidate: RTCIceCandidateInit };
+type OfferPayload = { from: string; sdp: RTCSessionDescriptionInit };
+type AnswerPayload = { from: string; sdp: RTCSessionDescriptionInit };
+type IcePayload = { from: string; candidate: RTCIceCandidateInit };
 
-/** Lo que envío por socket: siempre ‘to’ y nunca ‘from’ */
-type EmitOffer = { to: string; sdp: RTCSessionDescriptionInit };
-type EmitAnswer = { to: string; sdp: RTCSessionDescriptionInit };
-type EmitIce = { to: string; candidate: RTCIceCandidateInit };
-
-export function useAudioCall(remoteId: string) {
-    const { user } = useAuth();
+export function useAudioCall() {
     const socket = useSocket();
     const pcRef = useRef<RTCPeerConnection | null>(null);
-
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [inCall, setInCall] = useState(false);
 
     useEffect(() => {
-        if (!socket || !user?.id) return;
+        if (!socket) return;
+
         const pc = new RTCPeerConnection(RTC_CONFIGURATION);
         pcRef.current = pc;
 
-        // 1) Captura el stream remoto
-        pc.ontrack = ({ streams }) => setRemoteStream(streams[0]);
+        pc.ontrack = ({ streams }) => {
+            console.log('[useAudioCall] ontrack → setRemoteStream');
+            setRemoteStream(streams[0]);
+        };
 
-        // 2) Emite ICE candidates
         pc.onicecandidate = ({ candidate }) => {
             if (!candidate) return;
-            const payload: EmitIce = {
-                to: remoteId,
-                candidate: candidate.toJSON()
-            };
             console.log('[useAudioCall] Emitting ICE candidate', candidate);
-            socket.emit('call:ice-candidate', payload);
+            socket.emit('call:ice-candidate', {
+                to: candidate.sdpMid, // realmente pondrás el ID de peer aquí
+                candidate: candidate.toJSON()
+            });
         };
 
-        // 3) Manejadores de eventos entrantes
-        const handleOffer = async ({ from, sdp }: ReceiveOffer) => {
-            if (from !== remoteId) return;
+        // Cuando llega la oferta
+        const handleOffer = async ({ from, sdp }: OfferPayload) => {
+            console.log('[useAudioCall] Received OFFER from', from);
+            if (!pcRef.current) return;
 
-            console.log('[useAudioCall] Received offer from', from);
+            await pcRef.current.setRemoteDescription(sdp);
+            const answer = await pcRef.current.createAnswer();
+            await pcRef.current.setLocalDescription(answer);
 
-            await pc.setRemoteDescription(sdp);
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
+            console.log('[useAudioCall] Sending ANSWER to', from);
+            socket.emit('call:answer', { to: from, sdp: answer });
 
-            const payload: EmitAnswer = { to: from, sdp: answer };
-            socket.emit('call:answer', payload);
             setInCall(true);
         };
 
-        const handleAnswer = async ({ from, sdp }: ReceiveAnswer) => {
-            if (from !== remoteId) return;
-
-            console.log('[useAudioCall] Received answer from', from);
-
-            await pc.setRemoteDescription(sdp);
+        // Cuando llega la respuesta
+        const handleAnswer = async ({ from, sdp }: AnswerPayload) => {
+            console.log('[useAudioCall] Received ANSWER from', from);
+            if (!pcRef.current) return;
+            await pcRef.current.setRemoteDescription(sdp);
             setInCall(true);
         };
 
-        const handleIce = async ({ from, candidate }: ReceiveIce) => {
-            if (from !== remoteId) return;
-
-            console.log('[useAudioCall] Received ICE candidate from', from, candidate);
-
+        // Cuando llega un ICE candidate
+        const handleIce = async ({ from, candidate }: IcePayload) => {
+            console.log('[useAudioCall] Received ICE from', from, candidate);
+            if (!pcRef.current) return;
             try {
-                await pc.addIceCandidate(candidate);
+                await pcRef.current.addIceCandidate(candidate);
             } catch (e) {
-                console.warn('Error añadiendo ICE candidate', e);
+                console.warn('Error adding ICE candidate', e);
             }
         };
 
@@ -88,24 +78,33 @@ export function useAudioCall(remoteId: string) {
             socket.off('call:answer', handleAnswer);
             socket.off('call:ice-candidate', handleIce);
         };
-    }, [socket, user?.id, remoteId]);
+    }, [socket]);
 
-    // Inicia la llamada
-    const startCall = useCallback(async () => {
-        if (!socket || !pcRef.current) return;
-        const localStream = await getLocalAudio();
-        localStream.getTracks().forEach(track =>
-            pcRef.current!.addTrack(track, localStream)
-        );
-        const offer = await pcRef.current.createOffer();
-        await pcRef.current.setLocalDescription(offer);
+    const startCall = useCallback(
+        async (remoteId: string) => {
+            if (!socket || !pcRef.current) {
+                console.warn('Socket o PeerConnection no listos');
+                return;
+            }
 
-        const payload: EmitOffer = { to: remoteId, sdp: offer };
-        socket.emit('call:offer', payload);
-    }, [socket, remoteId]);
+            console.log('[useAudioCall] startCall → grabbing mic');
+            const localStream = await getLocalAudio();
+            localStream.getTracks().forEach(track =>
+                pcRef.current!.addTrack(track, localStream)
+            );
 
-    // Termina la llamada
+            console.log('[useAudioCall] Creating OFFER');
+            const offer = await pcRef.current!.createOffer();
+            await pcRef.current!.setLocalDescription(offer);
+
+            console.log('[useAudioCall] Emitting OFFER to', remoteId);
+            socket.emit('call:offer', { to: remoteId, sdp: offer });
+        },
+        [socket]
+    );
+
     const endCall = useCallback(() => {
+        console.log('[useAudioCall] endCall');
         pcRef.current?.close();
         setInCall(false);
         setRemoteStream(null);
