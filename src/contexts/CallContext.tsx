@@ -47,41 +47,50 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
 
     const endCall = useCallback(() => {
         console.log('[Call] Finalizando llamada...');
-        isCallIncoming.current = false;
 
-        // Limpiar timeouts
+        // A. Resetear estados PRIMERO para evitar referencias nulas
+        setCallState('idle');
+        setIsMuted(false);
+
+        // B. Limpiar timeouts
         if (iceRestartTimeout.current) {
             clearTimeout(iceRestartTimeout.current);
             iceRestartTimeout.current = null;
         }
 
-        // Cerrar contexto de audio
+        // C. Cerrar contexto de audio
         if (audioContextRef.current) {
             audioContextRef.current.close();
             audioContextRef.current = null;
         }
 
-        // Notificar al otro usuario
+        // D. Notificar al otro usuario (si existe)
         if (remoteUser) {
             socket?.emit('call-ended', { to: remoteUser.id });
         }
 
-        // Cerrar conexión peer
+        // E. Cerrar conexión peer
         if (peerConnection.current) {
+            // Remover todos los listeners para prevenir fugas de memoria
+            peerConnection.current.onicecandidate = null;
+            peerConnection.current.oniceconnectionstatechange = null;
+            peerConnection.current.onsignalingstatechange = null;
+            peerConnection.current.onnegotiationneeded = null;
+            peerConnection.current.ontrack = null;
+
             peerConnection.current.close();
             peerConnection.current = null;
         }
 
-        // Detener y limpiar stream local
+        // F. Detener y limpiar streams
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 track.stop();
-                track.enabled = false; // Forzar deshabilitación
+                track.enabled = false; // Forzar deshabilitación física
             });
             setLocalStream(null);
         }
 
-        // Detener y limpiar stream remoto
         if (remoteStream) {
             remoteStream.getTracks().forEach(track => {
                 track.stop();
@@ -90,14 +99,11 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             setRemoteStream(null);
         }
 
-        // Resetear estados
+        // G. Resetear usuario remoto ÚLTIMO
         setRemoteUser(null);
-        setCallState('idle');
-        setIsMuted(false);
 
         console.log('[Call] Llamada finalizada completamente');
     }, [remoteUser, socket, localStream, remoteStream]);
-
     const restartIce = useCallback(async () => {
         if (!peerConnection.current || !remoteUser) return;
 
@@ -214,11 +220,19 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             }
 
             console.log('[WebRTC] onnegotiationneeded disparado');
+
             try {
+                // Verificar que remoteUser existe antes de proceder
+                if (!remoteUser) {
+                    console.error('[WebRTC] Error: remoteUser es null en onnegotiationneeded');
+                    return;
+                }
+
                 const offer = await pc.createOffer({ iceRestart: false });
                 await pc.setLocalDescription(offer);
+
                 socket?.emit('webrtc-offer', {
-                    to: remoteUser!.id,
+                    to: remoteUser.id, // Ahora seguro que existe
                     offer,
                     iceRestart: false
                 });
@@ -304,31 +318,41 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             iceRestart?: boolean;
         }) => {
             try {
-                // Siempre usar conexión existente si está disponible
+                // 1. Validar usuario remoto
+                if (!remoteUser) {
+                    console.warn('[WebRTC] Offer recibida sin remoteUser. Creando temporal...');
+                    setRemoteUser({ id: from, username: 'Usuario Temporal' });
+                }
+
+                // 2. Inicializar conexión si es necesario
                 if (!peerConnection.current) {
                     peerConnection.current = setupPeerConnection();
                 }
 
-                const pc = peerConnection.current!;
+                const pc = peerConnection.current;
 
-                // Reutilizar stream de audio precargado
+                // 3. Añadir tracks locales si existen
                 if (!iceRestart && localStream) {
                     localStream.getTracks().forEach(track => {
-                        console.log(`[WebRTC] Añadiendo track local: ${track.kind}`);
-                        pc.addTrack(track, localStream);
+                        // Evitar duplicados
+                        const existingSender = pc.getSenders().find(s => s.track === track);
+                        if (!existingSender) {
+                            console.log(`[WebRTC] Añadiendo track local: ${track.kind}`);
+                            pc.addTrack(track, localStream);
+                        }
                     });
                 }
 
-                // Aplicar oferta remota
+                // 4. Establecer descripción remota
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 console.log('[WebRTC] Offer remota establecida');
 
-                // Crear y enviar respuesta si no es reinicio ICE
+                // 5. Manejar respuesta para ofertas nuevas (no reinicios)
                 if (!iceRestart) {
                     console.log('[WebRTC] Creando answer');
                     const answer = await pc.createAnswer();
 
-                    // Esperar a que ICE gathering esté completo
+                    // Esperar ICE gathering (vital para estabilidad)
                     await new Promise<void>((resolve) => {
                         if (pc.iceGatheringState === 'complete') {
                             resolve();
@@ -343,6 +367,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                         }
                     });
 
+                    // 6. Establecer y enviar respuesta
                     console.log('[WebRTC] Setting localDescription (answer)');
                     await pc.setLocalDescription(answer);
                     console.log('[WebRTC] Enviando answer');
@@ -409,24 +434,32 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             socket.off('proceed-with-webrtc', handleProceedWithWebRTC);
             socket.off('peer-disconnected', handlePeerDisconnected);
         };
-    }, [socket, setupPeerConnection, endCall, localStream, callState, remoteUser?.id, restartIce]);
+    }, [socket, setupPeerConnection, endCall, localStream, callState, remoteUser?.id, restartIce, remoteUser]);
 
     const startCall = useCallback(async (userId: string, username: string) => {
+        // Usar ref para mantener el userId durante la operación asíncrona
+        const targetUserId = userId;
+        const targetUsername = username;
+
+        // 1. Limpieza inicial
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
         }
+
         if (localStream) {
             localStream.getTracks().forEach(track => {
                 track.stop();
-                track.enabled = false; // Forzar deshabilitación
+                track.enabled = false;
             });
             setLocalStream(null);
         }
 
-        setRemoteUser({ id: userId, username });
+        // 2. Establecer estado INMEDIATAMENTE
+        setRemoteUser({ id: targetUserId, username: targetUsername });
         setCallState('calling');
 
+        // 3. Verificar acceso a micrófono
         const hasMic = await verifyMicrophoneAccess();
         if (!hasMic) {
             console.error('[Audio] No se detectaron micrófonos disponibles');
@@ -435,10 +468,9 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         try {
-            // Solicitar permisos primero
+            // 4. Obtener permisos de micrófono (dos pasos para Android)
             await navigator.mediaDevices.getUserMedia({ audio: true });
 
-            // Luego obtener stream con parámetros específicos
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -450,25 +482,27 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 }
             });
 
-            // Activar tracks explícitamente
+            // 5. Activar tracks explícitamente
             stream.getAudioTracks().forEach(t => t.enabled = true);
             setLocalStream(stream);
 
+            // 6. Configurar peer connection
             const pc = setupPeerConnection();
             peerConnection.current = pc;
 
-            // Añadir tracks ANTES de crear la oferta
+            // 7. Añadir tracks locales
             stream.getTracks().forEach(track => {
                 const sender = pc.addTrack(track, stream);
                 console.log(`[WebRTC] Track local añadido: ${track.kind}`, sender);
             });
 
+            // 8. Crear oferta explícita
             const offer = await pc.createOffer({
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: false
             });
 
-            // Esperar a que ICE gathering esté completo
+            // 9. Esperar ICE gathering (CRÍTICO para Android)
             await new Promise<void>((resolve) => {
                 if (pc.iceGatheringState === 'complete') {
                     resolve();
@@ -483,11 +517,13 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 }
             });
 
+            // 10. Establecer descripción local
             await pc.setLocalDescription(offer);
             console.log('[WebRTC] Oferta local creada:', offer.sdp);
 
-            socket?.emit('incoming-call', { to: userId, username });
-            socket?.emit('webrtc-offer', { to: userId, offer });
+            // 11. Enviar eventos
+            socket?.emit('incoming-call', { to: targetUserId, username: targetUsername });
+            socket?.emit('webrtc-offer', { to: targetUserId, offer });
         } catch (err) {
             console.error('[CallContext] Error al iniciar llamada:', err);
             endCall();
