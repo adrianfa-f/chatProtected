@@ -46,41 +46,56 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     const isCallIncoming = useRef(false);
 
     const endCall = useCallback(() => {
-
+        console.log('[Call] Finalizando llamada...');
         isCallIncoming.current = false;
 
+        // Limpiar timeouts
         if (iceRestartTimeout.current) {
             clearTimeout(iceRestartTimeout.current);
             iceRestartTimeout.current = null;
         }
 
+        // Cerrar contexto de audio
         if (audioContextRef.current) {
             audioContextRef.current.close();
             audioContextRef.current = null;
         }
 
+        // Notificar al otro usuario
         if (remoteUser) {
             socket?.emit('call-ended', { to: remoteUser.id });
         }
 
+        // Cerrar conexión peer
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
         }
 
+        // Detener y limpiar stream local
         if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
+            localStream.getTracks().forEach(track => {
+                track.stop();
+                track.enabled = false; // Forzar deshabilitación
+            });
             setLocalStream(null);
         }
 
+        // Detener y limpiar stream remoto
         if (remoteStream) {
-            remoteStream.getTracks().forEach(track => track.stop());
+            remoteStream.getTracks().forEach(track => {
+                track.stop();
+                track.enabled = false;
+            });
             setRemoteStream(null);
         }
 
+        // Resetear estados
         setRemoteUser(null);
         setCallState('idle');
         setIsMuted(false);
+
+        console.log('[Call] Llamada finalizada completamente');
     }, [remoteUser, socket, localStream, remoteStream]);
 
     const restartIce = useCallback(async () => {
@@ -154,12 +169,14 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         // envío de candidates ICE tras setLocalDescription
         pc.onicecandidate = (e) => {
             if (e.candidate && remoteUser?.id) {
-                // Agregar este console.log para depuración
                 console.log('[ICE] Enviando candidato:', e.candidate);
                 socket?.emit('webrtc-ice-candidate', {
                     to: remoteUser.id,
                     candidate: e.candidate
                 });
+            }
+            if (e.candidate === null) {
+                console.log('[ICE] Todos los candidates locales enviados');
             }
         };
 
@@ -170,12 +187,18 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         pc.oniceconnectionstatechange = () => {
             console.log('[WebRTC] iceConnectionState →', pc.iceConnectionState);
 
+            // Manejar reconexión con timeout
             if (pc.iceConnectionState === 'disconnected') {
                 setTimeout(() => {
                     if (pc.iceConnectionState !== 'connected') {
+                        console.error('[WebRTC] Reconexión fallida, reiniciando ICE...');
                         restartIce();
                     }
                 }, 2000);
+            }
+            else if (pc.iceConnectionState === 'failed') {
+                console.error('[WebRTC] Conexión ICE fallida, reiniciando...');
+                restartIce();
             }
         };
 
@@ -185,28 +208,44 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
 
         // negociación inicial (solo si signalingState es 'stable')
         pc.onnegotiationneeded = async () => {
-            if (pc.signalingState !== 'stable') return;
+            if (pc.signalingState !== 'stable') {
+                console.warn('[WebRTC] onnegotiationneeded ignorado (signalingState no es stable)');
+                return;
+            }
+
             console.log('[WebRTC] onnegotiationneeded disparado');
-            const offer = await pc.createOffer({ iceRestart: false });
-            await pc.setLocalDescription(offer);
-            socket?.emit('webrtc-offer', {
-                to: remoteUser!.id,
-                offer,
-                iceRestart: false
-            });
-        };
-
-        pc.ontrack = (e) => {
-            if (!e.streams || e.streams.length === 0) return;
-
-            // Filtrar streams duplicados
-            if (!remoteStream || remoteStream.id !== e.streams[0].id) {
-                const clonedStream = new MediaStream(e.streams[0].getTracks());
-                setRemoteStream(clonedStream);
+            try {
+                const offer = await pc.createOffer({ iceRestart: false });
+                await pc.setLocalDescription(offer);
+                socket?.emit('webrtc-offer', {
+                    to: remoteUser!.id,
+                    offer,
+                    iceRestart: false
+                });
+            } catch (err) {
+                console.error('[WebRTC] Error en onnegotiationneeded:', err);
             }
         };
 
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
+        pc.ontrack = (e) => {
+            console.log('[WebRTC] Track recibido:', e.track.kind,
+                'Estado:', e.track.readyState,
+                'Habilitado:', e.track.enabled);
+            if (e.streams && e.streams.length > 0) {
+                console.log('[WebRTC] Configurando stream remoto con ID:', e.streams[0].id);
+
+                // Prevenir duplicados
+                if (!remoteStream || remoteStream.id !== e.streams[0].id) {
+                    const clonedStream = new MediaStream(e.streams[0].getTracks());
+                    setRemoteStream(clonedStream);
+                }
+
+                if (!audioContextRef.current) {
+                    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+        };
+
         return pc;
     }, [socket, restartIce, remoteUser, remoteStream]);
 
@@ -265,17 +304,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             iceRestart?: boolean;
         }) => {
             try {
-
-                // Validar estados permitidos
-                if (callState !== 'ringing' && callState !== 'in-progress' && !iceRestart) {
-                    return;
-                }
-
-                // Inicializar conexión si es nueva o reinicio ICE
-                if (!peerConnection.current || !iceRestart) {
-                    if (peerConnection.current) {
-                        peerConnection.current.close();
-                    }
+                // Siempre usar conexión existente si está disponible
+                if (!peerConnection.current) {
                     peerConnection.current = setupPeerConnection();
                 }
 
@@ -284,7 +314,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 // Reutilizar stream de audio precargado
                 if (!iceRestart && localStream) {
                     localStream.getTracks().forEach(track => {
-                        console.log(`[WebRTC] Añadiendo track local precargado: ${track.kind}`);
+                        console.log(`[WebRTC] Añadiendo track local: ${track.kind}`);
                         pc.addTrack(track, localStream);
                     });
                 }
@@ -297,10 +327,26 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 if (!iceRestart) {
                     console.log('[WebRTC] Creando answer');
                     const answer = await pc.createAnswer();
+
+                    // Esperar a que ICE gathering esté completo
+                    await new Promise<void>((resolve) => {
+                        if (pc.iceGatheringState === 'complete') {
+                            resolve();
+                        } else {
+                            const handler = () => {
+                                if (pc.iceGatheringState === 'complete') {
+                                    pc.removeEventListener('icegatheringstatechange', handler);
+                                    resolve();
+                                }
+                            };
+                            pc.addEventListener('icegatheringstatechange', handler);
+                        }
+                    });
+
                     console.log('[WebRTC] Setting localDescription (answer)');
                     await pc.setLocalDescription(answer);
                     console.log('[WebRTC] Enviando answer');
-                    socket.emit('webrtc-answer', { to: from, answer });
+                    socket?.emit('webrtc-answer', { to: from, answer });
                 }
             } catch (err) {
                 console.error('[CallContext] Error al manejar oferta:', err);
@@ -366,14 +412,15 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     }, [socket, setupPeerConnection, endCall, localStream, callState, remoteUser?.id, restartIce]);
 
     const startCall = useCallback(async (userId: string, username: string) => {
-
-
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
         }
         if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
+            localStream.getTracks().forEach(track => {
+                track.stop();
+                track.enabled = false; // Forzar deshabilitación
+            });
             setLocalStream(null);
         }
 
@@ -388,8 +435,10 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         try {
+            // Solicitar permisos primero
             await navigator.mediaDevices.getUserMedia({ audio: true });
 
+            // Luego obtener stream con parámetros específicos
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -400,11 +449,15 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                     sampleSize: 16
                 }
             });
+
+            // Activar tracks explícitamente
+            stream.getAudioTracks().forEach(t => t.enabled = true);
             setLocalStream(stream);
 
             const pc = setupPeerConnection();
             peerConnection.current = pc;
 
+            // Añadir tracks ANTES de crear la oferta
             stream.getTracks().forEach(track => {
                 const sender = pc.addTrack(track, stream);
                 console.log(`[WebRTC] Track local añadido: ${track.kind}`, sender);
@@ -414,6 +467,22 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: false
             });
+
+            // Esperar a que ICE gathering esté completo
+            await new Promise<void>((resolve) => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    const handler = () => {
+                        if (pc.iceGatheringState === 'complete') {
+                            pc.removeEventListener('icegatheringstatechange', handler);
+                            resolve();
+                        }
+                    };
+                    pc.addEventListener('icegatheringstatechange', handler);
+                }
+            });
+
             await pc.setLocalDescription(offer);
             console.log('[WebRTC] Oferta local creada:', offer.sdp);
 

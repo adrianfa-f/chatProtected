@@ -120,6 +120,22 @@ const CallScreen = () => {
         }
     }, [remoteStream]);
 
+    useEffect(() => {
+        const handlePlayError = async () => {
+            if (remoteRef.current && remoteRef.current.paused) {
+                try {
+                    await remoteRef.current.play();
+                } catch (err) {
+                    console.error('Error de reproducción remota:', err);
+                    setAudioError('Error de audio. Toca para reintentar');
+                }
+            }
+        };
+
+        const interval = setInterval(handlePlayError, 3000);
+        return () => clearInterval(interval);
+    }, []);
+
     if (callState === 'idle') return null;
 
     return (
