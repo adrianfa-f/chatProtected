@@ -112,14 +112,15 @@ const ChatWindow = () => {
                         </p>
                     </div>
                 </div>
-                <div className="ml-auto">
-                    <button
-                        onClick={() => startCall(otherUser.id, otherUser.username)}
-                        className="text-purple-600 hover:text-purple-800"
-                    >
-                        <FaPhone />
-                    </button>
-                </div>
+                <button
+                    onClick={() => {
+                        console.log('[ChatWindow] Pulsado teléfono. Llamando a:', otherUser.id);
+                        startCall(otherUser.id);
+                    }}
+                    className="text-purple-600 hover:text-purple-800"
+                >
+                    <FaPhone />
+                </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 pt-16 pb-20">
