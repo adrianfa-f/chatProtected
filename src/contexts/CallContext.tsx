@@ -218,7 +218,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
         if (!socket) return;
 
-        const handleIncomingCall = ({ from, username }: { from: string; username: string }) => {
+        const handleIncomingCall = async ({ from, username }: { from: string; username: string }) => {
 
             isCallIncoming.current = true;
 
@@ -226,6 +226,29 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 socket.emit('call-ended', { to: from });
                 return;
             }
+
+            try {
+                const hasMic = await verifyMicrophoneAccess();
+                if (hasMic) {
+                    const preloadStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                            channelCount: 1,
+                            sampleRate: 16000,
+                            sampleSize: 16
+                        }
+                    });
+                    // Nos aseguramos de que venga activo
+                    preloadStream.getAudioTracks().forEach(t => t.enabled = true);
+                    setLocalStream(preloadStream);
+                    console.log('[Audio] Micrófono precargado y habilitado en receptor');
+                }
+            } catch (err) {
+                console.warn('[Audio] No se pudo precargar micrófono:', err);
+            }
+            //
             setRemoteUser({ id: from, username });
             setCallState('ringing');
         };
@@ -240,55 +263,40 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             iceRestart?: boolean;
         }) => {
             try {
-
+                // Ignorar ofertas si no ha llegado una llamada entrante
                 if (!iceRestart && !isCallIncoming.current) {
                     console.warn('[WebRTC] Offer recibida sin incoming-call → ignorando');
                     return;
                 }
 
-                if (callState !== 'ringing' && callState !== 'in-progress' && !iceRestart) return;
-
-                if (!iceRestart) {
-                    const hasMic = await verifyMicrophoneAccess();
-                    if (!hasMic) {
-                        console.error('[Audio] No hay micrófonos disponibles (callee)');
-                        endCall();
-                        return;
-                    }
-                    if (localStream) {
-                        localStream.getTracks().forEach(track => track.stop());
-                        setLocalStream(null);
-                    }
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true,
-                            channelCount: 1,
-                            sampleRate: 16000,
-                            sampleSize: 16
-                        }
-                    });
-                    setLocalStream(stream);
+                // Validar estados permitidos
+                if (callState !== 'ringing' && callState !== 'in-progress' && !iceRestart) {
+                    return;
                 }
 
+                // Inicializar conexión si es nueva o reinicio ICE
                 if (!peerConnection.current || !iceRestart) {
-                    if (peerConnection.current) peerConnection.current.close();
+                    if (peerConnection.current) {
+                        peerConnection.current.close();
+                    }
                     peerConnection.current = setupPeerConnection();
                 }
 
                 const pc = peerConnection.current!;
 
+                // Reutilizar stream de audio precargado
                 if (!iceRestart && localStream) {
                     localStream.getTracks().forEach(track => {
-                        const sender = pc.addTrack(track, localStream);
-                        console.log(`[WebRTC] Track local añadido (callee): ${track.kind}`, sender);
+                        console.log(`[WebRTC] Añadiendo track local precargado: ${track.kind}`);
+                        pc.addTrack(track, localStream);
                     });
                 }
 
+                // Aplicar oferta remota
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 console.log('[WebRTC] Offer remota establecida');
 
+                // Crear y enviar respuesta si no es reinicio ICE
                 if (!iceRestart) {
                     console.log('[WebRTC] Creando answer');
                     const answer = await pc.createAnswer();
@@ -297,12 +305,12 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                     console.log('[WebRTC] Enviando answer');
                     socket.emit('webrtc-answer', { to: from, answer });
                 }
-
             } catch (err) {
                 console.error('[CallContext] Error al manejar oferta:', err);
                 endCall();
             }
         };
+
 
         const handleWebRTCAnswer = async ({ answer }: { answer: RTCSessionDescriptionInit; from: string }) => {
             try {
