@@ -20,6 +20,29 @@ const CallScreen = () => {
     const [remoteTracks, setRemoteTracks] = useState<string[]>([]);
     const playAttemptRef = useRef<NodeJS.Timeout | null>(null);
 
+    useEffect(() => {
+        const handleUserInteraction = async () => {
+            if (remoteRef.current && remoteRef.current.paused) {
+                try {
+                    await remoteRef.current.play();
+                    setAudioError(null);
+                } catch (e) {
+                    console.log("Error en iteracion de audio: ", e)
+                    setAudioError('Se requiere interacción del usuario para activar audio');
+                }
+            }
+        };
+
+        // Intentar reproducir en eventos de interacción
+        window.addEventListener('click', handleUserInteraction);
+        window.addEventListener('touchstart', handleUserInteraction);
+
+        return () => {
+            window.removeEventListener('click', handleUserInteraction);
+            window.removeEventListener('touchstart', handleUserInteraction);
+        };
+    }, []);
+
     // Reproducir audio local
     useEffect(() => {
         if (localStream && localRef.current) {

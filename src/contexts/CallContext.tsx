@@ -35,6 +35,7 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     const socket = useSocket();
     const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'in-progress'>('idle');
     const [remoteUser, setRemoteUser] = useState<{ id: string; username: string } | null>(null);
+    const remoteUserRef = useRef(remoteUser);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -44,6 +45,16 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     const audioContextRef = useRef<AudioContext | null>(null);
 
     const isCallIncoming = useRef(false);
+    const socketRef = useRef(socket);
+
+    useEffect(() => {
+        socketRef.current = socket;
+    }, [socket]);
+
+
+    useEffect(() => {
+        remoteUserRef.current = remoteUser;
+    }, [remoteUser]);
 
     const endCall = useCallback(() => {
         console.log('[Call] Finalizando llamada...');
@@ -101,9 +112,11 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
 
         // G. Resetear usuario remoto ÚLTIMO
         setRemoteUser(null);
+        remoteUserRef.current = null;
 
         console.log('[Call] Llamada finalizada completamente');
     }, [remoteUser, socket, localStream, remoteStream]);
+
     const restartIce = useCallback(async () => {
         if (!peerConnection.current || !remoteUser) return;
 
@@ -129,7 +142,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             });
 
             iceRestartTimeout.current = setTimeout(() => {
-                if (peerConnection.current?.iceConnectionState !== 'connected') {
+                if (peerConnection.current?.iceConnectionState !== 'connected' &&
+                    peerConnection.current?.iceConnectionState !== 'completed') {
                     restartIce();
                 }
             }, 5000);
@@ -222,8 +236,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             console.log('[WebRTC] onnegotiationneeded disparado');
 
             try {
-                // Verificar que remoteUser existe antes de proceder
-                if (!remoteUser) {
+                // Usar ref en lugar de state para acceder al valor actual
+                if (!remoteUserRef.current) {
                     console.error('[WebRTC] Error: remoteUser es null en onnegotiationneeded');
                     return;
                 }
@@ -231,8 +245,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
                 const offer = await pc.createOffer({ iceRestart: false });
                 await pc.setLocalDescription(offer);
 
-                socket?.emit('webrtc-offer', {
-                    to: remoteUser.id, // Ahora seguro que existe
+                socketRef.current?.emit('webrtc-offer', {
+                    to: remoteUserRef.current.id,
                     offer,
                     iceRestart: false
                 });
@@ -441,6 +455,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         const targetUserId = userId;
         const targetUsername = username;
 
+        remoteUserRef.current = { id: userId, username };
+
         // 1. Limpieza inicial
         if (peerConnection.current) {
             peerConnection.current.close();
@@ -503,16 +519,23 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             });
 
             // 9. Esperar ICE gathering (CRÍTICO para Android)
-            await new Promise<void>((resolve) => {
+            await new Promise<void>((resolve, reject) => {
                 if (pc.iceGatheringState === 'complete') {
                     resolve();
                 } else {
+                    const timeout = setTimeout(() => {
+                        pc.removeEventListener('icegatheringstatechange', handler);
+                        reject(new Error('Tiempo de espera para ICE gathering excedido'));
+                    }, 10000); // 10 segundos timeout
+
                     const handler = () => {
                         if (pc.iceGatheringState === 'complete') {
+                            clearTimeout(timeout);
                             pc.removeEventListener('icegatheringstatechange', handler);
                             resolve();
                         }
                     };
+
                     pc.addEventListener('icegatheringstatechange', handler);
                 }
             });
