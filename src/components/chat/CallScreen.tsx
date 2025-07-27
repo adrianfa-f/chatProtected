@@ -194,7 +194,31 @@ const CallScreen = () => {
             </div>
 
             <audio ref={localRef} autoPlay muted style={{ display: 'none' }} />
-            <audio ref={remoteRef} autoPlay style={{ display: 'none' }} />
+            <audio
+                ref={remoteRef}
+                autoPlay
+                playsInline  // Agregar esto
+                style={{ display: 'none' }}
+                onCanPlay={() => {
+                    remoteRef.current?.play().catch(e =>
+                        console.error('Error autoplay:', e)
+                    );
+                }}
+            />
+            {audioError && (
+                <button
+                    onClick={() => {
+                        if (remoteRef.current) {
+                            remoteRef.current.play().catch(e =>
+                                console.error('Error al reintentar:', e)
+                            );
+                        }
+                    }}
+                    className="mt-4 px-4 py-2 bg-blue-500 rounded-md"
+                >
+                    Activar Audio
+                </button>
+            )}
         </div>
     );
 };

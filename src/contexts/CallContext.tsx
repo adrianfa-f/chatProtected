@@ -86,6 +86,11 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     const restartIce = useCallback(async () => {
         if (!peerConnection.current || !remoteUser) return;
 
+        if (peerConnection.current.iceConnectionState === 'connected') {
+            console.log('[WebRTC] ICE ya conectado, omitiendo reinicio');
+            return;
+        }
+
         if (iceRestartTimeout.current) {
             clearTimeout(iceRestartTimeout.current);
             iceRestartTimeout.current = null;
@@ -149,13 +154,12 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         // envío de candidates ICE tras setLocalDescription
         pc.onicecandidate = (e) => {
             if (e.candidate && remoteUser?.id) {
+                // Agregar este console.log para depuración
+                console.log('[ICE] Enviando candidato:', e.candidate);
                 socket?.emit('webrtc-ice-candidate', {
                     to: remoteUser.id,
                     candidate: e.candidate
                 });
-            }
-            if (e.candidate === null) {
-                console.log('[ICE] Todos los candidates locales enviados');
             }
         };
 
@@ -165,10 +169,13 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
 
         pc.oniceconnectionstatechange = () => {
             console.log('[WebRTC] iceConnectionState →', pc.iceConnectionState);
-            if (pc.iceConnectionState === 'disconnected' ||
-                pc.iceConnectionState === 'failed') {
-                console.error('[WebRTC] Conexión ICE fallida, intentando reiniciar...');
-                restartIce();
+
+            if (pc.iceConnectionState === 'disconnected') {
+                setTimeout(() => {
+                    if (pc.iceConnectionState !== 'connected') {
+                        restartIce();
+                    }
+                }, 2000);
             }
         };
 
@@ -190,23 +197,18 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         };
 
         pc.ontrack = (e) => {
-            console.log('[WebRTC] Track recibido:', e.track.kind,
-                'Estado:', e.track.readyState,
-                'Habilitado:', e.track.enabled);
-            if (e.streams && e.streams.length > 0) {
-                console.log('[WebRTC] Configurando stream remoto con ID:', e.streams[0].id);
+            if (!e.streams || e.streams.length === 0) return;
+
+            // Filtrar streams duplicados
+            if (!remoteStream || remoteStream.id !== e.streams[0].id) {
                 const clonedStream = new MediaStream(e.streams[0].getTracks());
                 setRemoteStream(clonedStream);
-
-                if (!audioContextRef.current) {
-                    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-                }
             }
         };
 
         pc.addTransceiver('audio', { direction: 'sendrecv' });
         return pc;
-    }, [socket, restartIce, remoteUser]);
+    }, [socket, restartIce, remoteUser, remoteStream]);
 
     const acceptCall = useCallback(() => {
         if (remoteUser) {
@@ -263,11 +265,6 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
             iceRestart?: boolean;
         }) => {
             try {
-                // Ignorar ofertas si no ha llegado una llamada entrante
-                if (!iceRestart && !isCallIncoming.current) {
-                    console.warn('[WebRTC] Offer recibida sin incoming-call → ignorando');
-                    return;
-                }
 
                 // Validar estados permitidos
                 if (callState !== 'ringing' && callState !== 'in-progress' && !iceRestart) {
@@ -369,6 +366,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
     }, [socket, setupPeerConnection, endCall, localStream, callState, remoteUser?.id, restartIce]);
 
     const startCall = useCallback(async (userId: string, username: string) => {
+
+
         if (peerConnection.current) {
             peerConnection.current.close();
             peerConnection.current = null;
@@ -389,6 +388,8 @@ export const CallProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
