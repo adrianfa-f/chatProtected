@@ -26,17 +26,21 @@ export function useAudioCall() {
 
     // Limpia todo el estado y las referencias
     const cleanup = useCallback(() => {
-        pcRef.current?.close()
-        localStreamRef.current?.getTracks().forEach(t => t.stop())
-        pcRef.current = null
-        localStreamRef.current = null
-        setRemoteStream(null)
-        setInCall(false)
-        setIncomingCall(false)
-        setCallerId(null)
-        setOfferSdp(null)
-        setMuted(false)
-    }, [])
+        if (pcRef.current) {
+            pcRef.current.close();
+            pcRef.current = null;
+        }
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(t => t.stop());
+            localStreamRef.current = null;
+        }
+        setRemoteStream(null);
+        setInCall(false);
+        setIncomingCall(false);
+        setCallerId(null);
+        setOfferSdp(null);
+        setMuted(false);
+    }, []);
 
     // Manejo de offer entrante
     const handleOffer = useCallback(({ from, sdp }: OfferPayload) => {
@@ -90,34 +94,43 @@ export function useAudioCall() {
 
     // Inicia la llamada (caller)
     const startCall = useCallback(async (remoteId: string) => {
-        if (!socket) return
+        if (!socket) return;
+        cleanup(); // Limpia cualquier llamada previa
 
-        const localStream = await getLocalAudio()
-        localStreamRef.current = localStream
+        try {
+            const localStream = await getLocalAudio();
+            localStreamRef.current = localStream;
 
-        const pc = new RTCPeerConnection(RTC_CONFIGURATION)
-        pcRef.current = pc
+            const pc = new RTCPeerConnection(RTC_CONFIGURATION);
+            pcRef.current = pc;
 
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream))
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-        const inbound = new MediaStream()
-        pc.ontrack = ({ track }) => {
-            inbound.addTrack(track)
-            setRemoteStream(inbound)
+            const inbound = new MediaStream();
+            pc.ontrack = ({ track }) => {
+                if (track.kind === 'audio') {
+                    inbound.addTrack(track);
+                    setRemoteStream(inbound);
+                }
+            };
+
+            pc.onicecandidate = ({ candidate }) => {
+                if (candidate && socket) {
+                    socket.emit('call:ice-candidate', { to: remoteId, candidate });
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('call:offer', { to: remoteId, sdp: offer });
+
+            setCallerId(remoteId); // Fijamos el callerId como el receptor
+            setInCall(true);
+        } catch (error) {
+            console.error("Error al iniciar llamada:", error);
+            cleanup();
         }
-
-        pc.onicecandidate = ({ candidate }) => {
-            if (candidate) {
-                socket.emit('call:ice-candidate', { to: remoteId, candidate })
-            }
-        }
-
-        const offer = await pc.createOffer()
-        await pc.setLocalDescription(offer)
-        socket.emit('call:offer', { to: remoteId, sdp: offer })
-
-        setInCall(true)
-    }, [socket])
+    }, [socket, cleanup]);
 
     // Acepta la llamada (callee)
     const acceptCall = useCallback(async () => {

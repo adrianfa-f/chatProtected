@@ -1,28 +1,24 @@
-// src/contexts/CallContext.tsx
-import React, { createContext, useContext } from 'react';
-import { useAudioCall } from '../hooks/useAudioCall';
+import { createContext, useContext, type ReactNode } from 'react'
+import { useAudioCall } from '../hooks/useAudioCall'
 
-interface CallContextValue {
-    startCall: (remoteId: string) => Promise<void>;
-    endCall: () => void;
-    inCall: boolean;
-    remoteStream: MediaStream | null;
-}
+type CallApi = ReturnType<typeof useAudioCall>
 
-const CallContext = createContext<CallContextValue | undefined>(undefined);
+const CallContext = createContext<CallApi | null>(null)
 
-export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { startCall, endCall, inCall, remoteStream } = useAudioCall();
+export const CallProvider = ({ children }: { children: ReactNode }) => {
+    const callApi = useAudioCall()
     return (
-        <CallContext.Provider value={{ startCall, endCall, inCall, remoteStream }}>
+        <CallContext.Provider value={callApi}>
             {children}
         </CallContext.Provider>
-    );
-};
+    )
+}
 
 /* eslint-disable-next-line react-refresh/only-export-components */
-export const useCall = () => {
-    const ctx = useContext(CallContext);
-    if (!ctx) throw new Error('useCall debe usarse dentro de CallProvider');
-    return ctx;
-};
+export const useCall = (): CallApi => {
+    const context = useContext(CallContext)
+    if (!context) {
+        throw new Error('useCall debe usarse dentro de <CallProvider>')
+    }
+    return context
+}
