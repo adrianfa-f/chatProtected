@@ -1,207 +1,141 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useSocket } from '../contexts/SocketContext'
-import { getLocalAudio } from '../utils/media'
-import { RTC_CONFIGURATION } from '../config/webrtc'
-
-type OfferPayload = { from: string; sdp: RTCSessionDescriptionInit }
-type AnswerPayload = { from: string; sdp: RTCSessionDescriptionInit }
-type IcePayload = { from: string; candidate: RTCIceCandidateInit }
+// src/hooks/useAudioCall.ts
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSocket } from '../contexts/SocketContext'                       // retorna Socket | null
+import { useAuth } from '../contexts/AuthContext'              // tu hook de auth
+import { RTC_CONFIGURATION } from '../config/webrtc'               // fábrica de RTCPeerConnection
 
 export function useAudioCall() {
-    const socket = useSocket()
+    const socket = useSocket()                                  // Socket | null
+    const { user } = useAuth()                                  // { id: string; … }
 
-    // Referencias mutables
     const pcRef = useRef<RTCPeerConnection | null>(null)
-    const localStreamRef = useRef<MediaStream | null>(null)
-
-    // Estados de llamada
-    const [inCall, setInCall] = useState(false)
-    const [incomingCall, setIncomingCall] = useState(false)
-    const [callerId, setCallerId] = useState<string | null>(null)
-    const [offerSdp, setOfferSdp] = useState<RTCSessionDescriptionInit | null>(null)
+    const peerIdRef = useRef<string | null>(null)
+    const [isCalling, setIsCalling] = useState(false)
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
 
-    // Estado de silencio
-    const [muted, setMuted] = useState(false)
 
-    // Limpia todo el estado y las referencias
-    const cleanup = useCallback(() => {
-        if (pcRef.current) {
-            pcRef.current.close();
-            pcRef.current = null;
-        }
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(t => t.stop());
-            localStreamRef.current = null;
-        }
-        setRemoteStream(null);
-        setInCall(false);
-        setIncomingCall(false);
-        setCallerId(null);
-        setOfferSdp(null);
-        setMuted(false);
-    }, []);
+    const startCall = useCallback(
+        async (targetId: string) => {
+            if (!socket || !user) throw new Error('Socket no inicializado')
+            peerIdRef.current = targetId
+            setIsCalling(true)
 
-    // Manejo de offer entrante
-    const handleOffer = useCallback(({ from, sdp }: OfferPayload) => {
-        setCallerId(from)
-        setOfferSdp(sdp)
-        setIncomingCall(true)
-    }, [])
+            // Capturar micrófono
+            const local = await navigator.mediaDevices.getUserMedia({ audio: true })
+            setLocalStream(local)
+            local.getTracks().forEach(track => pcRef.current!.addTrack(track, local))
 
-    // Manejo de answer recibido
-    const handleAnswer = useCallback(async ({ sdp }: AnswerPayload) => {
-        if (pcRef.current && sdp) {
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(sdp))
-        }
-    }, [])
+            // Crear y enviar oferta
+            const offer = await pcRef.current!.createOffer()
+            await pcRef.current!.setLocalDescription(offer)
 
-    // Manejo de candidato ICE remoto
-    const handleRemoteIce = useCallback(async ({ candidate }: IcePayload) => {
-        if (pcRef.current && candidate) {
-            await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate))
-        }
-    }, [])
+            socket.emit('call-user', {
+                from: user.id,
+                to: targetId,
+                sdp: offer.sdp,
+            })
+        },
+        [socket, user]
+    )
 
-    // Manejo de rechazo de llamada
-    const handleReject = useCallback(() => {
-        cleanup()
-    }, [cleanup])
+    const endCall = useCallback(() => {
+        if (!socket || !user) return
+        const target = peerIdRef.current
+        socket.emit('end-call', { from: user.id, to: target })
+        pcRef.current?.close()
+        setIsCalling(false)
+        setLocalStream(null)
+        setRemoteStream(null)
+    }, [socket, user])
 
-    // Manejo de colgado por parte del otro
-    const handleHangUp = useCallback(() => {
-        cleanup()
-    }, [cleanup])
-
-    // Registra y limpia listeners de señalización
     useEffect(() => {
-        if (!socket) return
+        if (!socket || !user) return
 
-        socket.on('call:offer', handleOffer)
-        socket.on('call:answer', handleAnswer)
-        socket.on('call:ice-candidate', handleRemoteIce)
-        socket.on('call:reject', handleReject)
-        socket.on('call:hang-up', handleHangUp)
-
-        return () => {
-            socket.off('call:offer', handleOffer)
-            socket.off('call:answer', handleAnswer)
-            socket.off('call:ice-candidate', handleRemoteIce)
-            socket.off('call:reject', handleReject)
-            socket.off('call:hang-up', handleHangUp)
-        }
-    }, [socket, handleOffer, handleAnswer, handleRemoteIce, handleReject, handleHangUp])
-
-    // Inicia la llamada (caller)
-    const startCall = useCallback(async (remoteId: string) => {
-        if (!socket) return;
-        cleanup(); // Limpia cualquier llamada previa
-
-        try {
-            const localStream = await getLocalAudio();
-            localStreamRef.current = localStream;
-
-            const pc = new RTCPeerConnection(RTC_CONFIGURATION);
-            pcRef.current = pc;
-
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-            const inbound = new MediaStream();
-            pc.ontrack = ({ track }) => {
-                if (track.kind === 'audio') {
-                    inbound.addTrack(track);
-                    setRemoteStream(inbound);
-                }
-            };
-
-            pc.onicecandidate = ({ candidate }) => {
-                if (candidate && socket) {
-                    socket.emit('call:ice-candidate', { to: remoteId, candidate });
-                }
-            };
-
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.emit('call:offer', { to: remoteId, sdp: offer });
-
-            setCallerId(remoteId); // Fijamos el callerId como el receptor
-            setInCall(true);
-        } catch (error) {
-            console.error("Error al iniciar llamada:", error);
-            cleanup();
-        }
-    }, [socket, cleanup]);
-
-    // Acepta la llamada (callee)
-    const acceptCall = useCallback(async () => {
-        if (!socket || !callerId || !offerSdp) return
-
-        const localStream = await getLocalAudio()
-        localStreamRef.current = localStream
-
-        const pc = new RTCPeerConnection(RTC_CONFIGURATION)
+        // 1) Crear PeerConnection
+        const pc = new RTCPeerConnection(RTC_CONFIGURATION);
         pcRef.current = pc
 
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream))
-
-        const inbound = new MediaStream()
-        pc.ontrack = ({ track }) => {
-            inbound.addTrack(track)
-            setRemoteStream(inbound)
-        }
-
-        pc.onicecandidate = ({ candidate }) => {
-            if (candidate) {
-                socket.emit('call:ice-candidate', { to: callerId, candidate })
+        // 2) Enviar ICE candidates por socket
+        const onIceCandidate = (evt: RTCPeerConnectionIceEvent) => {
+            const candidate = evt.candidate
+            const target = peerIdRef.current
+            if (candidate && target) {
+                socket.emit('ice-candidate', {
+                    from: user.id,
+                    to: target,
+                    candidate,
+                })
             }
         }
+        pc.addEventListener('icecandidate', onIceCandidate)
 
-        await pc.setRemoteDescription(new RTCSessionDescription(offerSdp))
-        const answer = await pc.createAnswer()
-        await pc.setLocalDescription(answer)
-        socket.emit('call:answer', { to: callerId, sdp: answer })
-
-        setIncomingCall(false)
-        setInCall(true)
-    }, [socket, callerId, offerSdp])
-
-    // Rechaza la llamada (callee)
-    const rejectCall = useCallback(() => {
-        if (socket && callerId) {
-            socket.emit('call:reject', { to: callerId })
-        }
-        cleanup()
-    }, [socket, callerId, cleanup])
-
-    // Cuelga llamada desde cualquiera de los dos
-    const endCall = useCallback(() => {
-        if (socket && callerId) {
-            socket.emit('call:hang-up', { to: callerId })
-        }
-        cleanup()
-    }, [socket, callerId, cleanup])
-
-    // Alterna silencio del micrófono
-    const toggleMute = useCallback(() => {
-        const stream = localStreamRef.current
-        if (!stream) return
-
-        stream.getAudioTracks().forEach(track => {
-            track.enabled = !track.enabled
-            setMuted(!track.enabled)
+        // 3) Recibir pistas remotas
+        const remote = new MediaStream()
+        setRemoteStream(remote)
+        pc.addEventListener('track', ({ streams: [stream] }) => {
+            stream.getTracks().forEach(track => remote.addTrack(track))
         })
-    }, [])
+
+        // 4) Listeners de socket
+        const handleIncoming = async ({ from, sdp }: { from: string; sdp: string }) => {
+            peerIdRef.current = from
+            setIsCalling(true)
+
+            // Captura micrófono
+            const local = await navigator.mediaDevices.getUserMedia({ audio: true })
+            setLocalStream(local)
+            local.getTracks().forEach(track => pc.addTrack(track, local))
+
+            // Responder oferta
+            await pc.setRemoteDescription({ type: 'offer', sdp })
+            const answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
+
+            socket.emit('answer-call', {
+                from: user.id,
+                to: from,
+                sdp: answer.sdp,
+            })
+        }
+
+        const handleAnswer = async ({ sdp }: { sdp: string }) => {
+            if (!pcRef.current) return
+            await pcRef.current.setRemoteDescription({ type: 'answer', sdp })
+        }
+
+        const handleIce = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+            if (!pcRef.current || !candidate) return
+            await pcRef.current.addIceCandidate(candidate)
+        }
+
+        const handleEnd = () => {
+            endCall()
+        }
+
+        socket.on('incoming-call', handleIncoming)
+        socket.on('call-answered', handleAnswer)
+        socket.on('ice-candidate', handleIce)
+        socket.on('call-ended', handleEnd)
+
+        return () => {
+            pc.close()
+            socket.off('incoming-call', handleIncoming)
+            socket.off('call-answered', handleAnswer)
+            socket.off('ice-candidate', handleIce)
+            socket.off('call-ended', handleEnd)
+            setIsCalling(false)
+            setLocalStream(null)
+            setRemoteStream(null)
+            peerIdRef.current = null
+        }
+    }, [socket, user, endCall])
 
     return {
-        inCall,
-        incomingCall,
-        callerId,
-        remoteStream,
-        muted,
         startCall,
-        acceptCall,
-        rejectCall,
-        toggleMute,
-        endCall
+        endCall,
+        isCalling,
+        localStream,
+        remoteStream,
     }
 }
