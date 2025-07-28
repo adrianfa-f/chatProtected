@@ -37,16 +37,7 @@ export function useAudioCall() {
         // Cuando llega la oferta
         const handleOffer = async ({ from, sdp }: OfferPayload) => {
             console.log('[useAudioCall] Received OFFER from', from);
-
-            if (!pcRef.current || pcRef.current.signalingState === 'closed') {
-                console.warn('PeerConnection cerrada, creando nueva');
-                pcRef.current = new RTCPeerConnection(RTC_CONFIGURATION);
-            }
-
-            const localStream = await getLocalAudio();
-            localStream.getTracks().forEach(track =>
-                pcRef.current!.addTrack(track, localStream)
-            );
+            if (!pcRef.current) return;
 
             await pcRef.current.setRemoteDescription(sdp);
             const answer = await pcRef.current.createAnswer();
