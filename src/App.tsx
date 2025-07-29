@@ -3,12 +3,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ChatProvider } from './contexts/ChatContext';
 import { SocketProvider } from './contexts/SocketContext';
-import { CallProvider } from './contexts/CallContext';
+import { CallProvider, useCall } from './contexts/CallContext';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
 import ChatWindowPage from './pages/ChatWindowPage';
 import { useChatSocket } from './hooks/useChatSocket';
 import CallScreen from './components/chat/CallScreen';
+import ActiveCallScreen from './components/chat/ActiveCallScreen';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { user } = useAuth();
@@ -21,6 +22,7 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 const AppContent = () => {
   useChatSocket();
   const { user } = useAuth();
+  const { status } = useCall();
 
   return (
     <BrowserRouter
@@ -49,7 +51,10 @@ const AppContent = () => {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {user && <CallScreen />}
+
+      {user && (status === 'calling' || status === 'ringing') && <CallScreen />}
+      {user && status === 'inCall' && <ActiveCallScreen />}
+
     </BrowserRouter>
   );
 };
