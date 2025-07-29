@@ -145,25 +145,6 @@ export function useAudioCall(): UseAudioCallApi {
         pendingCandidates.current = []
     }, [localStream])
 
-    const startRtcCall = useCallback((targetId: string) => {
-        const pc = initPeerConnection()
-        getLocalAudio().then(stream => {
-            setLocalStream(stream)
-            stream.getTracks().forEach(t => pc.addTrack(t, stream))
-            pc.createOffer().then(offer => {
-                pc.setLocalDescription(offer).then(() => {
-                    socket.emit('call-sdp', {
-                        callId,
-                        sdp: offer.sdp!,
-                        type: 'offer',
-                        from: user!.id,
-                        to: targetId
-                    })
-                })
-            })
-        })
-    }, [socket, user, callId, initPeerConnection])
-
 
     // — Señalización socket —————————————————————————————
     useEffect(() => {
@@ -182,7 +163,6 @@ export function useAudioCall(): UseAudioCallApi {
         }
         const onAccept = (p: CallSignalPayload) => {
             if (p.callId === callId) dispatch({ type: 'ACCEPT' })
-            startRtcCall(peerId!)
         }
         const onEnd = (p: CallSignalPayload) => {
             if (p.callId === callId) dispatch({ type: 'END' })
@@ -255,7 +235,7 @@ export function useAudioCall(): UseAudioCallApi {
             socket.off('call-sdp', onSdp)
             socket.off('ice-candidate', onIce)
         }
-    }, [socket, user, callId, initPeerConnection, peerId, startRtcCall, cleanup])
+    }, [socket, user, callId, initPeerConnection, peerId, cleanup])
 
     // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
