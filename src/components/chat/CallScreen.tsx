@@ -18,15 +18,19 @@ const CallScreen = () => {
 
     useEffect(() => {
         if (localAudioRef.current && localStream) {
-            localAudioRef.current.srcObject = localStream
+            console.log("Asignando local stream", localStream.id);
+            localAudioRef.current.srcObject = localStream;
+            localAudioRef.current.play().catch(e => console.error("Error local audio", e));
         }
-    }, [localStream])
+    }, [localStream]);
 
     useEffect(() => {
         if (remoteAudioRef.current && remoteStream) {
-            remoteAudioRef.current.srcObject = remoteStream
+            console.log("Asignando remote stream", remoteStream.id);
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(e => console.error("Error remote audio", e));
         }
-    }, [remoteStream])
+    }, [remoteStream]);
 
     return (
         <>
