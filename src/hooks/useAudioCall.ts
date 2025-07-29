@@ -1,252 +1,274 @@
-import {
-    useReducer,
-    useState,
-    useEffect,
-    useRef,
-    useCallback
-} from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { useSocket } from '../contexts/SocketContext';
-import { useAuth } from '../contexts/AuthContext';
-import { RTC_CONFIGURATION } from '../config/webrtc';
-import { getLocalAudio, stopLocalAudio } from '../utils/media';
-import {
-    callReducer,
-    initialCallState,
-    type CallState,
-} from '../contexts/callReducer';
+// src/hooks/useAudioCall.ts
+import { useReducer, useState, useRef, useEffect, useCallback } from 'react'
+import { v4 as uuidv4 } from 'uuid'
+import type { Socket } from 'socket.io-client'
+import { useSocket } from '../contexts/SocketContext'
+import { useAuth } from '../contexts/AuthContext'
+import { RTC_CONFIGURATION } from '../config/webrtc'
+import { getLocalAudio, stopLocalAudio } from '../utils/media'
 
-export interface CallApi {
-    status: CallState['callState'];
-    callId: string | null;
-    peerId: string | null;
-    error: string | null;
-    localStream: MediaStream | null;
-    remoteStream: MediaStream | null;
-    requestCall: (peerId: string) => void;
-    cancelCall: () => void;
-    declineCall: () => void;
-    acceptCall: () => void;
-    endCall: () => void;
+// —— 1. Define tipos de estado y acciones —————————————————————
+type CallStateType = 'idle' | 'calling' | 'ringing' | 'inCall'
+
+interface CallState {
+    callState: CallStateType
+    callId: string | null
+    peerId: string | null
+    error: string | null
 }
 
-export function useAudioCall(): CallApi {
-    const socket = useSocket();         // Socket | null
-    const { user } = useAuth();         // { id: string; … }
+type CallAction =
+    | { type: 'REQUEST'; payload: { callId: string; peerId: string } }
+    | { type: 'RECEIVE'; payload: { callId: string; from: string } }
+    | { type: 'ACCEPT' }
+    | { type: 'DECLINE' }
+    | { type: 'CANCEL' }
+    | { type: 'END' }
+    | { type: 'TIMEOUT' }
+    | { type: 'ERROR'; payload: { message: string } }
 
-    // —–– Máquina de estados de llamada
-    const [callData, dispatchCall] = useReducer(
-        callReducer,
-        initialCallState
-    );
-    const { callState: status, callId, peerId, error } = callData;
+const initialCallState: CallState = {
+    callState: 'idle',
+    callId: null,
+    peerId: null,
+    error: null
+}
 
-    // —–– RTCPeerConnection y Streams
-    const pcRef = useRef<RTCPeerConnection | null>(null);
-    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-
-    // Fábrica de PeerConnection (igual que antes)
-    const initPeerConnection = useCallback(() => {
-        const pc = new RTCPeerConnection(RTC_CONFIGURATION);
-        pcRef.current = pc;
-
-        // prepara stream remoto
-        const remote = new MediaStream();
-        setRemoteStream(remote);
-        pc.ontrack = ({ streams: [stream] }) => {
-            stream.getTracks().forEach(track => remote.addTrack(track));
-        };
-
-        // emite ICE candidates
-        pc.onicecandidate = ({ candidate }) => {
-            if (candidate && callId) {
-                socket?.emit('ice-candidate', { callId, candidate });
+function callReducer(state: CallState, action: CallAction): CallState {
+    switch (action.type) {
+        case 'REQUEST':
+            return {
+                callState: 'calling',
+                callId: action.payload.callId,
+                peerId: action.payload.peerId,
+                error: null
             }
-        };
+        case 'RECEIVE':
+            return {
+                callState: 'ringing',
+                callId: action.payload.callId,
+                peerId: action.payload.from,
+                error: null
+            }
+        case 'ACCEPT':
+            return state.callState === 'ringing'
+                ? { ...state, callState: 'inCall', error: null }
+                : state
+        case 'DECLINE':
+        case 'CANCEL':
+        case 'END':
+        case 'TIMEOUT':
+            return initialCallState
+        case 'ERROR':
+            return { ...initialCallState, error: action.payload.message }
+        default:
+            return state
+    }
+}
 
-        return pc;
-    }, [socket, callId]);
+// —— 2. Payloads de socket ——————————————————————————————————
+interface CallRequestPayload { callId: string; from: string; to: string }
+interface CallSignalPayload { callId: string; from: string; to: string }
+interface CallSdpPayload { callId: string; sdp: string; type: 'offer' | 'answer'; from: string; to: string }
+interface IceCandidatePayload { callId: string; candidate: RTCIceCandidateInit; from: string; to: string }
 
-    // Lógica WebRTC de oferta
-    const startRtcCall = useCallback(
-        async (targetId: string) => {
-            const pc = initPeerConnection();
-            const stream = await getLocalAudio();
-            setLocalStream(stream);
-            stream.getTracks().forEach(t => pc.addTrack(t, stream));
+// —— 3. API del hook ———————————————————————————————————————
+export interface UseAudioCallApi {
+    status: CallStateType
+    callId: string | null
+    peerId: string | null
+    error: string | null
+    localStream: MediaStream | null
+    remoteStream: MediaStream | null
+    requestCall: (peerId: string) => void
+    cancelCall: () => void
+    acceptCall: () => void
+    declineCall: () => void
+    endCall: () => void
+}
 
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
+export function useAudioCall(): UseAudioCallApi {
+    const socket = useSocket() as Socket
+    const { user } = useAuth()
+    const [state, dispatch] = useReducer(callReducer, initialCallState)
+    const { callState: status, callId, peerId, error } = state
 
-            socket?.emit('call-sdp', {
-                callId,
-                sdp: offer.sdp,
-                to: targetId
-            });
-        },
-        [initPeerConnection, socket, callId]
-    );
+    const pcRef = useRef<RTCPeerConnection | null>(null)
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
 
-    // Lógica WebRTC de respuesta
-    const answerRtcCall = useCallback(
-        async (fromId: string, sdp: string) => {
-            const pc = initPeerConnection();
-            const stream = await getLocalAudio();
-            setLocalStream(stream);
-            stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    // Inicializa conexión WebRTC
+    const initPeerConnection = useCallback((): RTCPeerConnection => {
+        const pc = new RTCPeerConnection(RTC_CONFIGURATION)
+        pcRef.current = pc
 
-            await pc.setRemoteDescription({ type: 'offer', sdp });
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
+        const remote = new MediaStream()
+        setRemoteStream(remote)
 
-            socket?.emit('call-sdp', {
-                callId,
-                sdp: answer.sdp,
-                to: fromId
-            });
-        },
-        [initPeerConnection, socket, callId]
-    );
+        pc.ontrack = (event: RTCTrackEvent) => {
+            const [stream] = event.streams
+            stream.getTracks().forEach(track => remote.addTrack(track))
+        }
 
-    // Limpieza de llamada (cierra PC y apaga micrófono)
-    const cleanupRtcCall = useCallback(() => {
-        if (localStream) stopLocalAudio(localStream);
-        pcRef.current?.close();
-        pcRef.current = null;
-        setLocalStream(null);
-        setRemoteStream(null);
-    }, [localStream]);
+        pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
+            const candidate = event.candidate?.toJSON()
+            if (candidate && callId && peerId) {
+                socket.emit('ice-candidate', {
+                    callId,
+                    candidate,
+                    from: user!.id,
+                    to: peerId
+                } as IceCandidatePayload)
+            }
+        }
 
-    // —–– 1) Escucha todos los eventos socket de la señalización
+        return pc
+    }, [socket, callId, peerId, user])
+
+    // Limpia recursos al colgar
+    const cleanup = useCallback(() => {
+        if (localStream) stopLocalAudio(localStream)
+        pcRef.current?.close()
+        pcRef.current = null
+        setLocalStream(null)
+        setRemoteStream(null)
+    }, [localStream])
+
+    // — Señalización por socket —————————————————————————————
     useEffect(() => {
-        if (!socket || !user) return;
+        if (!socket || !user) return
 
-        const onRequest = ({
-            callId: incomingId,
-            from,
-            to
-        }: {
-            callId: string;
-            from: string;
-            to: string;
-        }) => {
-            // sólo si soy destinatario
-            if (to !== user.id) return;
-            dispatchCall({ type: 'RECEIVE', payload: { callId: incomingId, from } });
-        };
+        const onRequest = (p: CallRequestPayload) => {
+            if (p.to !== user.id) return
+            dispatch({ type: 'RECEIVE', payload: { callId: p.callId, from: p.from } })
+        }
+        const onCancel = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'CANCEL' }) }
+        const onDecline = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'DECLINE' }) }
+        const onAccept = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'ACCEPT' }) }
+        const onEnd = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'END' }) }
 
-        const onCancel = ({ callId: id }: { callId: string }) => {
-            if (id !== callId) return;
-            dispatchCall({ type: 'CANCEL' });
-        };
+        const onSdp = async (p: CallSdpPayload) => {
+            if (p.callId !== callId) return
 
-        const onDecline = ({ callId: id }: { callId: string }) => {
-            if (id !== callId) return;
-            dispatchCall({ type: 'DECLINE' });
-        };
+            if (p.type === 'offer') {
+                const pc = initPeerConnection()
+                const local = await getLocalAudio()
+                setLocalStream(local)
+                local.getTracks().forEach(t => pc.addTrack(t, local))
 
-        const onAccept = ({ callId: id }: { callId: string }) => {
-            if (id !== callId) return;
-            dispatchCall({ type: 'ACCEPT' });
-        };
+                await pc.setRemoteDescription({ type: 'offer', sdp: p.sdp })
+                const answer = await pc.createAnswer()
+                await pc.setLocalDescription(answer)
 
-        const onEnd = ({ callId: id }: { callId: string }) => {
-            if (id !== callId) return;
-            dispatchCall({ type: 'END' });
-        };
-
-        const onSdp = ({
-            callId: id,
-            sdp,
-            type
-        }: {
-            callId: string;
-            sdp: string;
-            type: 'offer' | 'answer';
-        }) => {
-            if (id !== callId) return;
-            if (type === 'offer') {
-                // soy callee
-                answerRtcCall(peerId!, sdp);
+                socket.emit('call-sdp', {
+                    callId: p.callId,
+                    sdp: answer.sdp!,
+                    type: 'answer',
+                    from: user.id,
+                    to: p.from
+                } as CallSdpPayload)
             } else {
-                // soy caller, recibo respuesta
-                pcRef.current?.setRemoteDescription({ type, sdp });
+                await pcRef.current?.setRemoteDescription({ type: 'answer', sdp: p.sdp })
             }
-        };
+        }
 
-        socket.on('call-request', onRequest);
-        socket.on('call-cancel', onCancel);
-        socket.on('call-decline', onDecline);
-        socket.on('call-accept', onAccept);
-        socket.on('call-end', onEnd);
-        socket.on('call-sdp', onSdp);
+        const onIce = async (p: IceCandidatePayload) => {
+            if (p.callId !== callId) return
+            await pcRef.current?.addIceCandidate(p.candidate)
+        }
+
+        socket.on('call-request', onRequest)
+        socket.on('call-cancel', onCancel)
+        socket.on('call-decline', onDecline)
+        socket.on('call-accept', onAccept)
+        socket.on('call-end', onEnd)
+        socket.on('call-sdp', onSdp)
+        socket.on('ice-candidate', onIce)
 
         return () => {
-            socket.off('call-request', onRequest);
-            socket.off('call-cancel', onCancel);
-            socket.off('call-decline', onDecline);
-            socket.off('call-accept', onAccept);
-            socket.off('call-end', onEnd);
-            socket.off('call-sdp', onSdp);
-        };
-    }, [socket, user, callId, peerId, answerRtcCall]);
+            socket.off('call-request', onRequest)
+            socket.off('call-cancel', onCancel)
+            socket.off('call-decline', onDecline)
+            socket.off('call-accept', onAccept)
+            socket.off('call-end', onEnd)
+            socket.off('call-sdp', onSdp)
+            socket.off('ice-candidate', onIce)
+        }
+    }, [socket, user, callId, initPeerConnection])
 
-    // —–– 2) Cuando `status` cambia, disparar WebRTC o limpieza
+    // — Manejo de estado de llamada —————————————————————————————
     useEffect(() => {
         if (status === 'inCall' && peerId) {
-            // Si yo lancé la llamada (status pasó de calling→inCall)
-            if (callData.callState === 'inCall') {
-                startRtcCall(peerId);
-            }
+            // yo inicié la llamada: genero offer
+            const pc = initPeerConnection()
+            getLocalAudio().then(stream => {
+                setLocalStream(stream)
+                stream.getTracks().forEach(t => pc.addTrack(t, stream))
+                pc.createOffer().then(offer => {
+                    pc.setLocalDescription(offer).then(() => {
+                        socket.emit('call-sdp', {
+                            callId,
+                            sdp: offer.sdp!,
+                            type: 'offer',
+                            from: user!.id,
+                            to: peerId
+                        } as CallSdpPayload)
+                    })
+                })
+            })
         }
         if (status === 'idle') {
-            cleanupRtcCall();
+            cleanup()
         }
-    }, [status, peerId, startRtcCall, cleanupRtcCall, callData.callState]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status])
 
-    // —–– 3) Funciones de control de llamada
-    const requestCall = useCallback(
-        (targetId: string) => {
-            if (!socket || !user) return;
-            const id = uuidv4();
-            dispatchCall({ type: 'REQUEST', payload: { callId: id, peerId: targetId } });
-            socket.emit('call-request', { callId: id, from: user.id, to: targetId });
+    // — Funciones de control de llamada —————————————————————————
+    const requestCall = useCallback((targetId: string) => {
+        if (!socket || !user) return
+        const id = uuidv4()
+        dispatch({ type: 'REQUEST', payload: { callId: id, peerId: targetId } })
+        socket.emit('call-request', {
+            callId: id,
+            from: user.id,
+            to: targetId
+        } as CallRequestPayload)
 
-            // timeout automático en 30s
-            setTimeout(() => {
-                if (status === 'calling' && callId === id) {
-                    dispatchCall({ type: 'TIMEOUT' });
-                    socket.emit('call-cancel', { callId: id });
-                }
-            }, 30_000);
-        },
-        [socket, user, status, callId]
-    );
+        setTimeout(() => {
+            if (status === 'calling' && callId === id) {
+                dispatch({ type: 'TIMEOUT' })
+                socket.emit('call-cancel', {
+                    callId: id,
+                    from: user.id,
+                    to: targetId
+                } as CallSignalPayload)
+            }
+        }, 30_000)
+    }, [socket, user, status, callId])
 
     const cancelCall = useCallback(() => {
-        if (!socket || status !== 'calling') return;
-        socket.emit('call-cancel', { callId });
-        dispatchCall({ type: 'CANCEL' });
-    }, [socket, status, callId]);
+        if (!socket || status !== 'calling' || !peerId || !user) return
+        socket.emit('call-cancel', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        dispatch({ type: 'CANCEL' })
+    }, [socket, status, callId, peerId, user])
 
     const declineCall = useCallback(() => {
-        if (!socket || status !== 'ringing' || !user) return;
-        socket.emit('call-decline', { callId, from: user.id, to: peerId! });
-        dispatchCall({ type: 'DECLINE' });
-    }, [socket, status, callId, peerId, user]);
+        if (!socket || status !== 'ringing' || !peerId || !user) return
+        socket.emit('call-decline', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        dispatch({ type: 'DECLINE' })
+    }, [socket, status, callId, peerId, user])
 
     const acceptCall = useCallback(() => {
-        if (!socket || status !== 'ringing' || !user) return;
-        socket.emit('call-accept', { callId, from: user.id, to: peerId! });
-        dispatchCall({ type: 'ACCEPT' });
-    }, [socket, status, callId, peerId, user]);
+        if (!socket || status !== 'ringing' || !peerId || !user) return
+        socket.emit('call-accept', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        dispatch({ type: 'ACCEPT' })
+    }, [socket, status, callId, peerId, user])
 
     const endCall = useCallback(() => {
-        if (!socket || status !== 'inCall') return;
-        socket.emit('call-end', { callId });
-        dispatchCall({ type: 'END' });
-    }, [socket, status, callId]);
+        if (!socket || status !== 'inCall' || !peerId || !user) return
+        socket.emit('call-end', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        dispatch({ type: 'END' })
+    }, [socket, status, callId, peerId, user])
 
     return {
         status,
@@ -257,8 +279,8 @@ export function useAudioCall(): CallApi {
         remoteStream,
         requestCall,
         cancelCall,
-        declineCall,
         acceptCall,
+        declineCall,
         endCall
-    };
+    }
 }

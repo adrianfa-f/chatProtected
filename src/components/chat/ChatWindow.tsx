@@ -116,7 +116,7 @@ const ChatWindow = () => {
                 <div className='ml-auto'>
                     <button
                         onClick={() => requestCall(otherUser.id)}
-                    /* disabled={status !== 'idle'} */
+                        className="text-purple-600 hover:text-purple-800"
                     >
                         <FaPhone />
                     </button>
