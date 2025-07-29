@@ -169,10 +169,13 @@ export function useAudioCall(): UseAudioCallApi {
         }
 
         const onSdp = async (p: CallSdpPayload) => {
+            console.log("Respondiendo al evento call-sdp")
             if (p.callId !== callId) return
+            console.log("p.callId !== callId")
 
             // si es oferta, soy callee
             if (p.type === 'offer') {
+                console.log("El payload es tipo offer")
                 const pc = initPeerConnection()
                 const local = await getLocalAudio()
                 setLocalStream(local)
@@ -186,7 +189,7 @@ export function useAudioCall(): UseAudioCallApi {
 
                 const answer = await pc.createAnswer()
                 await pc.setLocalDescription(answer)
-
+                console.log("Aqui ya cumplimos todo el proceso de iniciar la peerConection agragar los tracks al stream agregar los candidatos y crear una respuesta")
                 socket.emit('call-sdp', {
                     callId: p.callId,
                     sdp: answer.sdp!,
@@ -194,6 +197,7 @@ export function useAudioCall(): UseAudioCallApi {
                     from: user.id,
                     to: p.from
                 } as CallSdpPayload)
+                console.log("Enviamos el evento socket call-sdp con la respuesta")
 
             } else {
                 // si es respuesta, soy caller
@@ -240,14 +244,20 @@ export function useAudioCall(): UseAudioCallApi {
     // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
         console.log("Status de la llamada cada vez que camia: ", status)
+        console.log("El peerId es: ", peerId)
         if (status === 'inCall' && peerId) {
             // yo soy caller: genero oferta
             const pc = initPeerConnection()
+            console.log("Iniciando peerConection ")
             getLocalAudio().then(stream => {
                 setLocalStream(stream)
+                console.log("Stream obtenido y actualizado el estado LocalStream", stream)
                 stream.getTracks().forEach(t => pc.addTrack(t, stream))
+                console.log("Agregando los tracks al stream")
                 pc.createOffer().then(offer => {
+                    console.log("Creando oferta")
                     pc.setLocalDescription(offer).then(() => {
+                        console.log("Actualizando la descripcion local con la oferta")
                         socket.emit('call-sdp', {
                             callId,
                             sdp: offer.sdp!,
@@ -255,6 +265,7 @@ export function useAudioCall(): UseAudioCallApi {
                             from: user!.id,
                             to: peerId
                         } as CallSdpPayload)
+                        console.log("Evento socket caa-sdp emitido")
                     })
                 })
             })
