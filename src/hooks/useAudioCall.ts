@@ -259,6 +259,7 @@ export function useAudioCall(): UseAudioCallApi {
 
     // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
+        console.log("Status de la llamada cada vez que camia: ", status)
         if (status === 'inCall' && peerId) {
             // yo soy caller: genero oferta
             const pc = initPeerConnection()
@@ -336,7 +337,6 @@ export function useAudioCall(): UseAudioCallApi {
             to: peerId
         } as CallSignalPayload)
         dispatch({ type: 'ACCEPT' })
-        console.log("Status luego de aceptar la llamada: ", status)
     }, [socket, status, callId, peerId, user])
 
     const endCall = useCallback(() => {
