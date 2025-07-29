@@ -4,7 +4,17 @@ import { useCall } from '../../contexts/CallContext';
 import { FaPhoneSlash } from 'react-icons/fa';
 
 const CallScreen = () => {
-    const { status, localStream, remoteStream, endCall, peerId } = useCall();
+    const {
+        status,
+        peerId,
+        localStream,
+        remoteStream,
+        cancelCall,
+        declineCall,
+        acceptCall,
+        endCall
+    } = useCall();
+
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const localAudioRef = useRef<HTMLAudioElement>(null);
     const prevRemoteStream = useRef<MediaStream | null>(null);
@@ -17,73 +27,87 @@ const CallScreen = () => {
         if (remoteStream === prevRemoteStream.current) return;
 
         prevRemoteStream.current = remoteStream;
-
         remoteAudioRef.current.srcObject = remoteStream;
-
-        // No intentar reproducir aquí - se hará en onCanPlay
     }, [remoteStream]);
 
-    // Manejo del stream local (siempre muteado)
+    // Manejo del stream local
     useEffect(() => {
         if (localAudioRef.current && localStream) {
             localAudioRef.current.srcObject = localStream;
         }
     }, [localStream]);
 
-    // Solo mostrar cuando estamos en llamada activa
-    if (status !== 'inCall') {
-        return null;
-    }
-
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50">
-            <div className="bg-white p-6 rounded shadow-lg max-w-md w-full">
-                <h2 className="text-xl font-semibold text-center mb-4">
-                    En llamada con <span className="text-purple-600">{peerId}</span>
-                </h2>
+        <>
+            {/* Elementos de audio ocultos */}
+            <audio
+                ref={remoteAudioRef}
+                onCanPlay={() => {
+                    remoteAudioRef.current?.play().catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error('Error al reproducir audio remoto:', e);
+                        }
+                    });
+                }}
+                className="hidden"
+            />
+            <audio
+                ref={localAudioRef}
+                muted
+                className="hidden"
+            />
 
-                {/* Indicador de estado */}
-                <div className="flex items-center justify-center mb-6">
-                    <span className="flex w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-                    <p className="text-sm text-gray-600">Llamada activa</p>
-                </div>
-
-                {/* Audio para stream remoto */}
-                <audio
-                    ref={remoteAudioRef}
-                    onCanPlay={() => {
-                        // Reproducir solo cuando el audio esté listo
-                        remoteAudioRef.current?.play().catch(e => {
-                            if (e.name !== 'AbortError') {
-                                console.error('Error al reproducir audio remoto:', e);
-                            }
-                        });
-                    }}
-                    className="hidden"
-                />
-
-                {/* Audio para stream local (muteado) */}
-                {localStream && (
-                    <audio
-                        ref={localAudioRef}
-                        muted
-                        className="hidden"
-                    />
-                )}
-
-                {/* Botón para finalizar llamada */}
-                <div className="flex justify-center mt-4">
+            {/* Pantallas de estado de llamada */}
+            {status === 'calling' && (
+                <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-50 text-white">
+                    <p className="text-xl mb-4">
+                        Llamando a <span className="font-semibold">{peerId}</span>...
+                    </p>
                     <button
-                        onClick={endCall}
-                        className="p-4 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors flex items-center justify-center"
-                        aria-label="Finalizar llamada"
+                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
+                        onClick={cancelCall}
                     >
-                        <FaPhoneSlash className="text-xl" />
-                        <span className="ml-2 font-medium">Colgar</span>
+                        <FaPhoneSlash className="inline mr-2" /> Colgar
                     </button>
                 </div>
-            </div>
-        </div>
+            )}
+
+            {status === 'ringing' && (
+                <div className="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-50 text-white">
+                    <p className="text-xl mb-4">
+                        Llamada entrante de <span className="font-semibold">{peerId}</span>
+                    </p>
+                    <div className="flex space-x-4">
+                        <button
+                            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded"
+                            onClick={acceptCall}
+                        >
+                            Aceptar
+                        </button>
+                        <button
+                            className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
+                            onClick={declineCall}
+                        >
+                            Rechazar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {status === 'inCall' && (
+                <div className="fixed inset-0 bg-gray-800 flex flex-col items-center justify-center z-50 text-white">
+                    <p className="text-xl mb-4">
+                        En llamada con <span className="font-semibold">{peerId}</span>
+                    </p>
+                    <button
+                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
+                        onClick={endCall}
+                    >
+                        <FaPhoneSlash className="inline mr-2" /> Colgar
+                    </button>
+                </div>
+            )}
+        </>
     );
 };
 
