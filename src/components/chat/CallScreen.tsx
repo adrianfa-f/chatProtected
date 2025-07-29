@@ -1,94 +1,90 @@
-import { useRef, useEffect } from 'react'
-import { useCall } from '../../contexts/CallContext'
+// src/components/chat/CallScreen.tsx
+import { useEffect, useRef } from 'react';
+import { useCall } from '../../contexts/CallContext';
+import { FaPhoneSlash } from 'react-icons/fa';
 
 const CallScreen = () => {
-    const {
-        status,
-        peerId,
-        localStream,
-        remoteStream,
-        cancelCall,
-        declineCall,
-        acceptCall,
-        endCall
-    } = useCall()
+    const { status, localStream, remoteStream, endCall, peerId } = useCall();
+    const remoteAudioRef = useRef<HTMLAudioElement>(null);
+    const localAudioRef = useRef<HTMLAudioElement>(null);
+    const prevRemoteStream = useRef<MediaStream | null>(null);
 
-    const localAudioRef = useRef<HTMLAudioElement>(null)
-    const remoteAudioRef = useRef<HTMLAudioElement>(null)
+    // Manejo seguro del stream remoto
+    useEffect(() => {
+        if (!remoteAudioRef.current || !remoteStream) return;
 
+        // Evitar recargar el mismo stream
+        if (remoteStream === prevRemoteStream.current) return;
+
+        prevRemoteStream.current = remoteStream;
+
+        remoteAudioRef.current.srcObject = remoteStream;
+
+        // No intentar reproducir aquí - se hará en onCanPlay
+    }, [remoteStream]);
+
+    // Manejo del stream local (siempre muteado)
     useEffect(() => {
         if (localAudioRef.current && localStream) {
-            console.log("Asignando local stream", localStream.id);
             localAudioRef.current.srcObject = localStream;
-            localAudioRef.current.play().catch(e => console.error("Error local audio", e));
         }
     }, [localStream]);
 
-    useEffect(() => {
-        if (remoteAudioRef.current && remoteStream) {
-            console.log("Asignando remote stream", remoteStream.id);
-            remoteAudioRef.current.srcObject = remoteStream;
-            remoteAudioRef.current.play().catch(e => console.error("Error remote audio", e));
-        }
-    }, [remoteStream]);
+    // Solo mostrar cuando estamos en llamada activa
+    if (status !== 'inCall') {
+        return null;
+    }
 
     return (
-        <>
-            {/* Elementos de audio ocultos para reproducir los streams */}
-            <audio ref={localAudioRef} autoPlay muted className="hidden" />
-            <audio ref={remoteAudioRef} autoPlay className="hidden" />
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50">
+            <div className="bg-white p-6 rounded shadow-lg max-w-md w-full">
+                <h2 className="text-xl font-semibold text-center mb-4">
+                    En llamada con <span className="text-purple-600">{peerId}</span>
+                </h2>
 
-            {status === 'calling' && (
-                <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-                    <p className="text-xl mb-4">
-                        Llamando a <span className="font-semibold">{peerId}</span>…
-                    </p>
-                    <button
-                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
-                        onClick={cancelCall}
-                    >
-                        Colgar
-                    </button>
+                {/* Indicador de estado */}
+                <div className="flex items-center justify-center mb-6">
+                    <span className="flex w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                    <p className="text-sm text-gray-600">Llamada activa</p>
                 </div>
-            )}
 
-            {status === 'ringing' && (
-                <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-                    <p className="text-xl mb-4">
-                        Llamada entrante de <span className="font-semibold">{peerId}</span>
-                    </p>
-                    <div className="flex space-x-4">
-                        <button
-                            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded"
-                            onClick={acceptCall}
-                        >
-                            Aceptar
-                        </button>
-                        <button
-                            className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
-                            onClick={declineCall}
-                        >
-                            Rechazar
-                        </button>
-                    </div>
-                </div>
-            )}
+                {/* Audio para stream remoto */}
+                <audio
+                    ref={remoteAudioRef}
+                    onCanPlay={() => {
+                        // Reproducir solo cuando el audio esté listo
+                        remoteAudioRef.current?.play().catch(e => {
+                            if (e.name !== 'AbortError') {
+                                console.error('Error al reproducir audio remoto:', e);
+                            }
+                        });
+                    }}
+                    className="hidden"
+                />
 
-            {status === 'inCall' && (
-                <div className="flex flex-col items-center justify-center h-screen bg-gray-800 text-white">
-                    <p className="text-xl mb-4">
-                        En llamada con <span className="font-semibold">{peerId}</span>
-                    </p>
+                {/* Audio para stream local (muteado) */}
+                {localStream && (
+                    <audio
+                        ref={localAudioRef}
+                        muted
+                        className="hidden"
+                    />
+                )}
+
+                {/* Botón para finalizar llamada */}
+                <div className="flex justify-center mt-4">
                     <button
-                        className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
                         onClick={endCall}
+                        className="p-4 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors flex items-center justify-center"
+                        aria-label="Finalizar llamada"
                     >
-                        Colgar
+                        <FaPhoneSlash className="text-xl" />
+                        <span className="ml-2 font-medium">Colgar</span>
                     </button>
                 </div>
-            )}
-        </>
-    )
-}
+            </div>
+        </div>
+    );
+};
 
-export default CallScreen
+export default CallScreen;
