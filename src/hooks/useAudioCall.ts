@@ -336,6 +336,7 @@ export function useAudioCall(): UseAudioCallApi {
             to: peerId
         } as CallSignalPayload)
         dispatch({ type: 'ACCEPT' })
+        console.log("Status luego de aceptar la llamada: ", status)
     }, [socket, status, callId, peerId, user])
 
     const endCall = useCallback(() => {
