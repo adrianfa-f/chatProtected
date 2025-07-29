@@ -145,6 +145,26 @@ export function useAudioCall(): UseAudioCallApi {
         pendingCandidates.current = []
     }, [localStream])
 
+    const startRtcCall = useCallback((targetId: string) => {
+        const pc = initPeerConnection()
+        getLocalAudio().then(stream => {
+            setLocalStream(stream)
+            stream.getTracks().forEach(t => pc.addTrack(t, stream))
+            pc.createOffer().then(offer => {
+                pc.setLocalDescription(offer).then(() => {
+                    socket.emit('call-sdp', {
+                        callId,
+                        sdp: offer.sdp!,
+                        type: 'offer',
+                        from: user!.id,
+                        to: targetId
+                    })
+                })
+            })
+        })
+    }, [socket, user, callId, initPeerConnection])
+
+
     // — Señalización socket —————————————————————————————
     useEffect(() => {
         if (!socket || !user) return
@@ -154,13 +174,15 @@ export function useAudioCall(): UseAudioCallApi {
             dispatch({ type: 'RECEIVE', payload: { callId: p.callId, from: p.from } })
         }
         const onCancel = (p: CallSignalPayload) => {
-            if (p.callId === callId) dispatch({ type: 'CANCEL' })
+            if (p.callId === callId) dispatch({ type: 'CANCEL' });
+            cleanup()
         }
         const onDecline = (p: CallSignalPayload) => {
             if (p.callId === callId) dispatch({ type: 'DECLINE' })
         }
         const onAccept = (p: CallSignalPayload) => {
             if (p.callId === callId) dispatch({ type: 'ACCEPT' })
+            startRtcCall(peerId!)
         }
         const onEnd = (p: CallSignalPayload) => {
             if (p.callId === callId) dispatch({ type: 'END' })
@@ -233,7 +255,7 @@ export function useAudioCall(): UseAudioCallApi {
             socket.off('call-sdp', onSdp)
             socket.off('ice-candidate', onIce)
         }
-    }, [socket, user, callId, initPeerConnection])
+    }, [socket, user, callId, initPeerConnection, peerId, startRtcCall, cleanup])
 
     // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
@@ -306,19 +328,6 @@ export function useAudioCall(): UseAudioCallApi {
         dispatch({ type: 'DECLINE' })
     }, [socket, status, callId, peerId, user])
 
-    const startRtcCall = useCallback(async (targetId: string) => {
-        const pc = initPeerConnection();
-        const stream = await getLocalAudio(); setLocalStream(stream);
-        stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        socket?.emit('call-sdp', { callId, sdp: offer.sdp, to: targetId });
-    },
-
-        [initPeerConnection, socket, callId]);
-
     const acceptCall = useCallback(() => {
         if (!socket || status !== 'ringing' || !peerId || !user) return
         socket.emit('call-accept', {
@@ -327,8 +336,7 @@ export function useAudioCall(): UseAudioCallApi {
             to: peerId
         } as CallSignalPayload)
         dispatch({ type: 'ACCEPT' })
-        startRtcCall(peerId)
-    }, [socket, status, callId, peerId, user, startRtcCall])
+    }, [socket, status, callId, peerId, user])
 
     const endCall = useCallback(() => {
         if (!socket || status !== 'inCall' || !peerId || !user) return
