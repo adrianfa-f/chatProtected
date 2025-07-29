@@ -57,7 +57,7 @@ function callReducer(state: CallState, action: CallAction): CallState {
                 error: null
             }
         case 'ACCEPT':
-            return state.callState === 'ringing'
+            return (state.callState === 'ringing' || state.callState === 'calling')
                 ? { ...state, callState: 'inCall', error: null }
                 : state
         case 'DECLINE':
