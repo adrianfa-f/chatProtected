@@ -306,6 +306,19 @@ export function useAudioCall(): UseAudioCallApi {
         dispatch({ type: 'DECLINE' })
     }, [socket, status, callId, peerId, user])
 
+    const startRtcCall = useCallback(async (targetId: string) => {
+        const pc = initPeerConnection();
+        const stream = await getLocalAudio(); setLocalStream(stream);
+        stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket?.emit('call-sdp', { callId, sdp: offer.sdp, to: targetId });
+    },
+
+        [initPeerConnection, socket, callId]);
+
     const acceptCall = useCallback(() => {
         if (!socket || status !== 'ringing' || !peerId || !user) return
         socket.emit('call-accept', {
@@ -314,7 +327,8 @@ export function useAudioCall(): UseAudioCallApi {
             to: peerId
         } as CallSignalPayload)
         dispatch({ type: 'ACCEPT' })
-    }, [socket, status, callId, peerId, user])
+        startRtcCall(peerId)
+    }, [socket, status, callId, peerId, user, startRtcCall])
 
     const endCall = useCallback(() => {
         if (!socket || status !== 'inCall' || !peerId || !user) return
