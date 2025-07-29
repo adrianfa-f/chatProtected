@@ -15,7 +15,7 @@ const ChatWindow = () => {
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const socket = useSocket();
-    const { startCall } = useCall();
+    const { status, requestCall } = useCall()
 
     const formatLastSeen = (lastSeen?: string | Date): string => {
         if (!lastSeen) return "Desconocido";
@@ -114,8 +114,8 @@ const ChatWindow = () => {
                 </div>
                 <div className='ml-auto'>
                     <button
-                        onClick={() => startCall(otherUser.id)}
-                        className="text-purple-600 hover:text-purple-800"
+                        onClick={() => requestCall(otherUser.id)}
+                        disabled={status !== 'idle'}
                     >
                         <FaPhone />
                     </button>

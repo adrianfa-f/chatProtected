@@ -1,55 +1,45 @@
 // src/components/CallScreen.tsx
-import { useEffect, useRef } from 'react';
-import { useCall } from '../../contexts/CallContext';
-import { FaPhoneSlash } from 'react-icons/fa';
+import { useCall } from '../../contexts/CallContext'
 
 const CallScreen = () => {
-    const { localStream, remoteStream, endCall, isCalling } = useCall();
-    const remoteAudioRef = useRef<HTMLAudioElement>(null);
-    const localAudioRef = useRef<HTMLAudioElement>(null);
+    const {
+        status,
+        peerId,
+        cancelCall,
+        declineCall,
+        acceptCall,
+        endCall
+    } = useCall()
 
-    // Cuando cambie remoteStream, conéctalo al <audio>
-    useEffect(() => {
-        if (remoteAudioRef.current && remoteStream) {
-            remoteAudioRef.current.srcObject = remoteStream;
-            remoteAudioRef.current.play().catch(() => { });
-        }
-    }, [remoteStream]);
-
-    // (Opcional) mostrar tu propio audio
-    useEffect(() => {
-        if (localAudioRef.current && localStream) {
-            localAudioRef.current.srcObject = localStream;
-            // no autoplay para evitar feedback
-        }
-    }, [localStream]);
-
-    if (!isCalling) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50">
-            <div className="bg-white p-6 rounded shadow-lg">
-                <h2 className="text-xl mb-4">Llamada en curso</h2>
-
-                <audio ref={remoteAudioRef} autoPlay />
-
-                {localStream && (
-                    <audio
-                        ref={localAudioRef}
-                        muted
-                        style={{ display: 'none' }}
-                    />
-                )}
-
-                <button
-                    onClick={endCall}
-                    className="mt-6 p-3 bg-red-600 text-white rounded-full hover:bg-red-700"
-                >
-                    <FaPhoneSlash /> Colgar
-                </button>
+    if (status === 'calling') {
+        return (
+            <div className="call-screen">
+                <p>Llamando a {peerId}…</p>
+                <button onClick={cancelCall}>Colgar</button>
             </div>
-        </div>
-    );
+        )
+    }
+
+    if (status === 'ringing') {
+        return (
+            <div className="call-screen">
+                <p>Llamada entrante de {peerId}</p>
+                <button onClick={acceptCall}>Aceptar</button>
+                <button onClick={declineCall}>Rechazar</button>
+            </div>
+        )
+    }
+
+    if (status === 'inCall') {
+        return (
+            <div className="call-screen">
+                <p>En llamada con {peerId}</p>
+                <button onClick={endCall}>Colgar</button>
+            </div>
+        )
+    }
+
+    return null
 }
 
 export default CallScreen
