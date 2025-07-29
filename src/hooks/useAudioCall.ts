@@ -1,5 +1,11 @@
 // src/hooks/useAudioCall.ts
-import { useReducer, useState, useRef, useEffect, useCallback } from 'react'
+import {
+    useReducer,
+    useState,
+    useRef,
+    useEffect,
+    useCallback
+} from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Socket } from 'socket.io-client'
 import { useSocket } from '../contexts/SocketContext'
@@ -7,7 +13,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { RTC_CONFIGURATION } from '../config/webrtc'
 import { getLocalAudio, stopLocalAudio } from '../utils/media'
 
-// —— 1. Define tipos de estado y acciones —————————————————————
+// —— 1. Tipos de estado y acciones —————————————————————
 type CallStateType = 'idle' | 'calling' | 'ringing' | 'inCall'
 
 interface CallState {
@@ -66,13 +72,13 @@ function callReducer(state: CallState, action: CallAction): CallState {
     }
 }
 
-// —— 2. Payloads de socket ——————————————————————————————————
+// —— 2. Payloads de socket ——————————————————————————————
 interface CallRequestPayload { callId: string; from: string; to: string }
 interface CallSignalPayload { callId: string; from: string; to: string }
 interface CallSdpPayload { callId: string; sdp: string; type: 'offer' | 'answer'; from: string; to: string }
 interface IceCandidatePayload { callId: string; candidate: RTCIceCandidateInit; from: string; to: string }
 
-// —— 3. API del hook ———————————————————————————————————————
+// —— 3. API del hook —————————————————————————————————————
 export interface UseAudioCallApi {
     status: CallStateType
     callId: string | null
@@ -97,25 +103,29 @@ export function useAudioCall(): UseAudioCallApi {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
 
-    // Inicializa conexión WebRTC
+    // Cola para candidatos ICE que llegan antes de setRemoteDescription
+    const pendingCandidates = useRef<RTCIceCandidateInit[]>([])
+
+    // Inicializa la RTCPeerConnection
     const initPeerConnection = useCallback((): RTCPeerConnection => {
         const pc = new RTCPeerConnection(RTC_CONFIGURATION)
         pcRef.current = pc
 
+        // remote stream
         const remote = new MediaStream()
         setRemoteStream(remote)
-
-        pc.ontrack = (event: RTCTrackEvent) => {
-            const [stream] = event.streams
-            stream.getTracks().forEach(track => remote.addTrack(track))
+        pc.ontrack = (evt: RTCTrackEvent) => {
+            const [stream] = evt.streams
+            stream.getTracks().forEach(t => remote.addTrack(t))
         }
 
-        pc.onicecandidate = (event: RTCPeerConnectionIceEvent) => {
-            const candidate = event.candidate?.toJSON()
-            if (candidate && callId && peerId) {
+        // ICE candidates locales
+        pc.onicecandidate = (evt: RTCPeerConnectionIceEvent) => {
+            const cand = evt.candidate?.toJSON()
+            if (cand && callId && peerId) {
                 socket.emit('ice-candidate', {
                     callId,
-                    candidate,
+                    candidate: cand,
                     from: user!.id,
                     to: peerId
                 } as IceCandidatePayload)
@@ -125,16 +135,17 @@ export function useAudioCall(): UseAudioCallApi {
         return pc
     }, [socket, callId, peerId, user])
 
-    // Limpia recursos al colgar
+    // Limpia la llamada
     const cleanup = useCallback(() => {
         if (localStream) stopLocalAudio(localStream)
         pcRef.current?.close()
         pcRef.current = null
         setLocalStream(null)
         setRemoteStream(null)
+        pendingCandidates.current = []
     }, [localStream])
 
-    // — Señalización por socket —————————————————————————————
+    // — Señalización socket —————————————————————————————
     useEffect(() => {
         if (!socket || !user) return
 
@@ -142,14 +153,23 @@ export function useAudioCall(): UseAudioCallApi {
             if (p.to !== user.id) return
             dispatch({ type: 'RECEIVE', payload: { callId: p.callId, from: p.from } })
         }
-        const onCancel = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'CANCEL' }) }
-        const onDecline = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'DECLINE' }) }
-        const onAccept = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'ACCEPT' }) }
-        const onEnd = (p: CallSignalPayload) => { if (p.callId === callId) dispatch({ type: 'END' }) }
+        const onCancel = (p: CallSignalPayload) => {
+            if (p.callId === callId) dispatch({ type: 'CANCEL' })
+        }
+        const onDecline = (p: CallSignalPayload) => {
+            if (p.callId === callId) dispatch({ type: 'DECLINE' })
+        }
+        const onAccept = (p: CallSignalPayload) => {
+            if (p.callId === callId) dispatch({ type: 'ACCEPT' })
+        }
+        const onEnd = (p: CallSignalPayload) => {
+            if (p.callId === callId) dispatch({ type: 'END' })
+        }
 
         const onSdp = async (p: CallSdpPayload) => {
             if (p.callId !== callId) return
 
+            // si es oferta, soy callee
             if (p.type === 'offer') {
                 const pc = initPeerConnection()
                 const local = await getLocalAudio()
@@ -157,6 +177,11 @@ export function useAudioCall(): UseAudioCallApi {
                 local.getTracks().forEach(t => pc.addTrack(t, local))
 
                 await pc.setRemoteDescription({ type: 'offer', sdp: p.sdp })
+
+                // añadir candidatos que llegaron antes
+                pendingCandidates.current.forEach(c => pc.addIceCandidate(c))
+                pendingCandidates.current = []
+
                 const answer = await pc.createAnswer()
                 await pc.setLocalDescription(answer)
 
@@ -167,14 +192,28 @@ export function useAudioCall(): UseAudioCallApi {
                     from: user.id,
                     to: p.from
                 } as CallSdpPayload)
+
             } else {
+                // si es respuesta, soy caller
                 await pcRef.current?.setRemoteDescription({ type: 'answer', sdp: p.sdp })
+
+                // drenar candidatos pendientes
+                pendingCandidates.current.forEach(c => pcRef.current?.addIceCandidate(c))
+                pendingCandidates.current = []
             }
         }
 
-        const onIce = async (p: IceCandidatePayload) => {
+        const onIce = (p: IceCandidatePayload) => {
             if (p.callId !== callId) return
-            await pcRef.current?.addIceCandidate(p.candidate)
+            const cand = new RTCIceCandidate(p.candidate)
+
+            // si ya tengo remoteDescription, añado directo
+            if (pcRef.current?.remoteDescription) {
+                pcRef.current.addIceCandidate(cand)
+            } else {
+                // si no, encolo
+                pendingCandidates.current.push(p.candidate)
+            }
         }
 
         socket.on('call-request', onRequest)
@@ -196,10 +235,10 @@ export function useAudioCall(): UseAudioCallApi {
         }
     }, [socket, user, callId, initPeerConnection])
 
-    // — Manejo de estado de llamada —————————————————————————————
+    // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
         if (status === 'inCall' && peerId) {
-            // yo inicié la llamada: genero offer
+            // yo soy caller: genero oferta
             const pc = initPeerConnection()
             getLocalAudio().then(stream => {
                 setLocalStream(stream)
@@ -217,13 +256,14 @@ export function useAudioCall(): UseAudioCallApi {
                 })
             })
         }
+
         if (status === 'idle') {
             cleanup()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status])
 
-    // — Funciones de control de llamada —————————————————————————
+    // — Funciones de control —————————————————————————————————
     const requestCall = useCallback((targetId: string) => {
         if (!socket || !user) return
         const id = uuidv4()
@@ -248,25 +288,41 @@ export function useAudioCall(): UseAudioCallApi {
 
     const cancelCall = useCallback(() => {
         if (!socket || status !== 'calling' || !peerId || !user) return
-        socket.emit('call-cancel', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        socket.emit('call-cancel', {
+            callId,
+            from: user.id,
+            to: peerId
+        } as CallSignalPayload)
         dispatch({ type: 'CANCEL' })
     }, [socket, status, callId, peerId, user])
 
     const declineCall = useCallback(() => {
         if (!socket || status !== 'ringing' || !peerId || !user) return
-        socket.emit('call-decline', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        socket.emit('call-decline', {
+            callId,
+            from: user.id,
+            to: peerId
+        } as CallSignalPayload)
         dispatch({ type: 'DECLINE' })
     }, [socket, status, callId, peerId, user])
 
     const acceptCall = useCallback(() => {
         if (!socket || status !== 'ringing' || !peerId || !user) return
-        socket.emit('call-accept', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        socket.emit('call-accept', {
+            callId,
+            from: user.id,
+            to: peerId
+        } as CallSignalPayload)
         dispatch({ type: 'ACCEPT' })
     }, [socket, status, callId, peerId, user])
 
     const endCall = useCallback(() => {
         if (!socket || status !== 'inCall' || !peerId || !user) return
-        socket.emit('call-end', { callId, from: user.id, to: peerId } as CallSignalPayload)
+        socket.emit('call-end', {
+            callId,
+            from: user.id,
+            to: peerId
+        } as CallSignalPayload)
         dispatch({ type: 'END' })
     }, [socket, status, callId, peerId, user])
 
