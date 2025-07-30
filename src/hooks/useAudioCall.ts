@@ -124,6 +124,7 @@ export function useAudioCall() {
     const endCall = useCallback(() => {
         if (!socket || !user) return
         const target = peerIdRef.current
+        console.log("PeerId al cerrar call: ", target)
         socket.emit('end-call', { from: user.id, to: target })
         cleanupCall()
     }, [socket, user, cleanupCall])
