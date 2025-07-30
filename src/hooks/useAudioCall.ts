@@ -11,9 +11,8 @@ import type { Socket } from 'socket.io-client'
 import { useSocket } from '../contexts/SocketContext'
 import { useAuth } from '../contexts/AuthContext'
 import { RTC_CONFIGURATION } from '../config/webrtc'
-import { getLocalAudio, stopLocalAudio } from '../utils/media'
 
-// —— 1. Tipos de estado y acciones —————————————————————
+// Tipos de estado y acciones
 type CallStateType = 'idle' | 'calling' | 'ringing' | 'inCall'
 
 interface CallState {
@@ -72,13 +71,13 @@ function callReducer(state: CallState, action: CallAction): CallState {
     }
 }
 
-// —— 2. Payloads de socket ——————————————————————————————
+// Payloads de socket
 interface CallRequestPayload { callId: string; from: string; to: string }
 interface CallSignalPayload { callId: string; from: string; to: string }
 interface CallSdpPayload { callId: string; sdp: string; type: 'offer' | 'answer'; from: string; to: string }
 interface IceCandidatePayload { callId: string; candidate: RTCIceCandidateInit; from: string; to: string }
 
-// —— 3. API del hook —————————————————————————————————————
+// API del hook
 export interface UseAudioCallApi {
     status: CallStateType
     callId: string | null
@@ -137,14 +136,18 @@ export function useAudioCall(): UseAudioCallApi {
 
     // Limpia la llamada
     const cleanup = useCallback(() => {
-        if (localStream) stopLocalAudio(localStream)
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop())
+        }
+        if (remoteStream) {
+            remoteStream.getTracks().forEach(track => track.stop())
+        }
         pcRef.current?.close()
         pcRef.current = null
         setLocalStream(null)
         setRemoteStream(null)
         pendingCandidates.current = []
-    }, [localStream])
-
+    }, [localStream, remoteStream])
 
     // — Señalización socket —————————————————————————————
     useEffect(() => {
@@ -174,33 +177,45 @@ export function useAudioCall(): UseAudioCallApi {
             // si es oferta, soy callee
             if (p.type === 'offer') {
                 const pc = initPeerConnection()
-                const local = await getLocalAudio()
-                setLocalStream(local)
-                local.getTracks().forEach(t => pc.addTrack(t, local))
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                    setLocalStream(stream)
+                    stream.getTracks().forEach(track => pc.addTrack(track, stream))
 
-                await pc.setRemoteDescription({ type: 'offer', sdp: p.sdp })
+                    await pc.setRemoteDescription({ type: 'offer', sdp: p.sdp })
 
-                // añadir candidatos que llegaron antes
-                pendingCandidates.current.forEach(c => pc.addIceCandidate(c))
-                pendingCandidates.current = []
+                    // añadir candidatos que llegaron antes
+                    pendingCandidates.current.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)))
+                    pendingCandidates.current = []
 
-                const answer = await pc.createAnswer()
-                await pc.setLocalDescription(answer)
-                socket.emit('call-sdp', {
-                    callId: p.callId,
-                    sdp: answer.sdp!,
-                    type: 'answer',
-                    from: user.id,
-                    to: p.from
-                } as CallSdpPayload)
+                    const answer = await pc.createAnswer()
+                    await pc.setLocalDescription(answer)
+                    socket.emit('call-sdp', {
+                        callId: p.callId,
+                        sdp: answer.sdp!,
+                        type: 'answer',
+                        from: user.id,
+                        to: p.from
+                    } as CallSdpPayload)
+                } catch (err) {
+                    console.log("Error al actualizar la descripcion type offer: ", err)
+                    dispatch({ type: 'ERROR', payload: { message: 'Error al aceptar llamada' } })
+                    cleanup()
+                }
 
             } else {
                 // si es respuesta, soy caller
-                await pcRef.current?.setRemoteDescription({ type: 'answer', sdp: p.sdp })
+                try {
+                    await pcRef.current?.setRemoteDescription({ type: 'answer', sdp: p.sdp })
 
-                // drenar candidatos pendientes
-                pendingCandidates.current.forEach(c => pcRef.current?.addIceCandidate(c))
-                pendingCandidates.current = []
+                    // drenar candidatos pendientes
+                    pendingCandidates.current.forEach(c => pcRef.current?.addIceCandidate(new RTCIceCandidate(c)))
+                    pendingCandidates.current = []
+                } catch (err) {
+                    console.log("Error al actualizar la descripcion type answer: ", err)
+                    dispatch({ type: 'ERROR', payload: { message: 'Error al establecer respuesta' } })
+                    cleanup()
+                }
             }
         }
 
@@ -238,25 +253,33 @@ export function useAudioCall(): UseAudioCallApi {
 
     // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
-        console.log("Status actual: ", status)
-        if (status === 'inCall' && peerId) {
-            // yo soy caller: genero oferta
-            const pc = initPeerConnection()
-            getLocalAudio().then(stream => {
-                setLocalStream(stream)
-                stream.getTracks().forEach(t => pc.addTrack(t, stream))
-                pc.createOffer().then(offer => {
-                    pc.setLocalDescription(offer).then(() => {
-                        socket.emit('call-sdp', {
-                            callId,
-                            sdp: offer.sdp!,
-                            type: 'offer',
-                            from: user!.id,
-                            to: peerId
-                        } as CallSdpPayload)
-                    })
-                })
-            })
+        if (status === 'calling' && peerId) {
+            // Iniciar la llamada: crear oferta
+            const startCall = async () => {
+                try {
+                    const pc = initPeerConnection()
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                    setLocalStream(stream)
+                    stream.getTracks().forEach(track => pc.addTrack(track, stream))
+
+                    const offer = await pc.createOffer()
+                    await pc.setLocalDescription(offer)
+
+                    // Enviar oferta
+                    socket.emit('call-sdp', {
+                        callId: callId!,
+                        sdp: offer.sdp!,
+                        type: 'offer',
+                        from: user!.id,
+                        to: peerId
+                    } as CallSdpPayload)
+                } catch (err) {
+                    console.log("Error al comenzar la llamada: ", err)
+                    dispatch({ type: 'ERROR', payload: { message: 'Error al iniciar llamada' } })
+                    cleanup()
+                }
+            };
+            startCall();
         }
 
         if (status === 'idle') {
