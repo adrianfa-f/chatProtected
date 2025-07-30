@@ -253,7 +253,7 @@ export function useAudioCall(): UseAudioCallApi {
 
     // — Manejo de cambios de estado —————————————————————————————
     useEffect(() => {
-        if (status === 'calling' && peerId) {
+        if (status === 'inCall' && peerId) {
             // Iniciar la llamada: crear oferta
             const startCall = async () => {
                 try {
