@@ -178,6 +178,9 @@ export function useAudioCall() {
         }
 
         const handleEnd = ({ from }: { from: string }) => {
+            console.log("peerIdRef.current: ", peerIdRef.current)
+            console.log("from: ", from)
+            console.log("peerIdRef.current = from :", peerIdRef.current === from)
             if (peerIdRef.current !== from) return
             cleanupCall()
         }
