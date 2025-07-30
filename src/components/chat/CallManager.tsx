@@ -5,17 +5,17 @@ import IncomingCallScreen from './IncomingCallScreen';
 import ActiveCallScreen from './ActiveCallScreen';
 
 const CallManager = () => {
-    const { isCalling, isRinging, remoteStream } = useCall();
+    const { isCalling, isRinging, inCall } = useCall();
 
     if (isRinging) {
         return <IncomingCallScreen />;
     }
 
-    if (isCalling && !remoteStream) {
+    if (isCalling) {
         return <OutgoingCallScreen />;
     }
 
-    if (remoteStream) {
+    if (inCall) {
         return <ActiveCallScreen />;
     }
 

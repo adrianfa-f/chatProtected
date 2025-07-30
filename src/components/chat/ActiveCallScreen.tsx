@@ -3,7 +3,8 @@ import { useCall } from '../../contexts/CallContext';
 import { FaPhoneSlash } from 'react-icons/fa';
 
 const ActiveCallScreen = () => {
-    const { localStream, remoteStream, endCall, isCalling } = useCall();
+    const { localStream, remoteStream, endCall, inCall } = useCall();
+    console.log("Tenemos al remoteStream: ", remoteStream)
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const localAudioRef = useRef<HTMLAudioElement>(null);
 
@@ -23,7 +24,7 @@ const ActiveCallScreen = () => {
         }
     }, [localStream]);
 
-    if (!isCalling) return null;
+    if (!inCall) return null;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50">

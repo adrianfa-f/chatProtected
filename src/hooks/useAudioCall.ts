@@ -16,6 +16,7 @@ export function useAudioCall() {
     // estado Reactivo
     const [isCalling, setIsCalling] = useState(false)
     const [isRinging, setIsRinging] = useState(false);
+    const [inCall, setInCall] = useState(false);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
 
@@ -76,6 +77,7 @@ export function useAudioCall() {
         setRemoteStream(null)
         setIsCalling(false)
         setIsRinging(false)
+        setInCall(false)
     }, [localStream, remoteStream])
 
     const requestCall = useCallback((peerId: string) => {
@@ -91,9 +93,11 @@ export function useAudioCall() {
     // 1️⃣ startCall: quien inicia la llamada
     const startCall = useCallback(
         async (targetId: string) => {
+            console.log("Comenzamos la llamada con: ", targetId)
             if (!socket || !user) throw new Error('Socket no inicializado')
             peerIdRef.current = targetId
-            setIsCalling(true)
+            setIsRinging(false)
+            setInCall(true)
 
             // crear nueva conexión
             const pc = initPeerConnection()
@@ -136,7 +140,7 @@ export function useAudioCall() {
         const handleIncoming = async ({ from, sdp }: { from: string; sdp: string }) => {
             if (isCallingRef.current) return
             peerIdRef.current = from
-            setIsCalling(true)
+            setInCall(true)
 
             const pc = initPeerConnection()
             const local = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -197,6 +201,7 @@ export function useAudioCall() {
         endCall,
         isCalling,
         isRinging,
+        inCall,
         localStream,
         remoteStream
     }
