@@ -142,6 +142,8 @@ export function useAudioCall() {
             peerIdRef.current = from
             setIsCalling(false)
             setInCall(true)
+            console.log("IsCalling: ", isCalling)
+            console.log("InCall: ", inCall)
 
             const pc = initPeerConnection()
             const local = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -193,7 +195,7 @@ export function useAudioCall() {
             socket.off('ice-candidate', handleIce)
             socket.off('call-ended', handleEnd)
         }
-    }, [socket, user, initPeerConnection, cleanupCall])
+    }, [socket, user, initPeerConnection, cleanupCall, inCall, isCalling])
 
     return {
         peerIdRef,
