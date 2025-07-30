@@ -3,7 +3,7 @@ import { FaPhone, FaTimes } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 
 const IncomingCallScreen = () => {
-    const { peerId, startCall, declineCall } = useCall(); // Usa startCall aquí
+    const { peerIdRef, startCall, endCall } = useCall();
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
@@ -13,18 +13,18 @@ const IncomingCallScreen = () => {
                         <div className="bg-gray-200 border-2 border-dashed rounded-full w-24 h-24" />
                     </div>
                     <h2 className="text-xl font-bold text-center mb-2">
-                        Llamada de <span className="text-purple-600">{peerId}</span>
+                        Llamada de <span className="text-purple-600">{peerIdRef.current}</span>
                     </h2>
                     <p className="text-gray-600 mb-6">¿Deseas responder?</p>
                     <div className="flex space-x-4">
                         <button
-                            onClick={startCall} // Ejecuta startCall al aceptar
+                            onClick={() => startCall(peerIdRef.current!)} // Ejecuta startCall al aceptar
                             className="bg-green-500 text-white p-4 rounded-full hover:bg-green-600 transition"
                         >
                             <FaPhone className="text-xl" />
                         </button>
                         <button
-                            onClick={declineCall}
+                            onClick={endCall}
                             className="bg-red-500 text-white p-4 rounded-full hover:bg-red-600 transition"
                         >
                             <FaTimes className="text-xl" />
