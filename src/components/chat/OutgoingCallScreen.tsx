@@ -3,7 +3,7 @@ import { FaPhoneSlash } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 
 const OutgoingCallScreen = () => {
-    const { peerIdRef, endCall } = useCall(); // endCall ahora cancela la solicitud
+    const { peerIdRef, cancelCall } = useCall(); // endCall ahora cancela la solicitud
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
@@ -17,7 +17,7 @@ const OutgoingCallScreen = () => {
                     </h2>
                     <p className="text-gray-600 mb-6">Esperando respuesta...</p>
                     <button
-                        onClick={endCall}
+                        onClick={cancelCall}
                         className="bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600 transition flex items-center"
                     >
                         <FaPhoneSlash className="mr-2" />

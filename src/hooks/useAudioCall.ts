@@ -86,6 +86,7 @@ export function useAudioCall() {
             from: user.id,
             to: peerId
         })
+        peerIdRef.current = peerId
         setIsCalling(true)
     }, [socket, user])
 
@@ -119,6 +120,20 @@ export function useAudioCall() {
         },
         [initPeerConnection, socket, user]
     )
+
+    const cancelCall = useCallback(() => {
+        if (!socket) return
+        socket.emit('cancel-call', { to: peerIdRef.current })
+
+        setIsCalling(false)
+    }, [socket])
+
+    const declineCall = useCallback(() => {
+        if (!socket) return
+        socket?.emit("decline-call", { to: peerIdRef.current })
+
+        setIsRinging(false)
+    }, [socket])
 
     // 2️⃣ endCall: cuelga la llamada
     const endCall = useCallback(() => {
@@ -185,6 +200,16 @@ export function useAudioCall() {
             cleanupCall()
         }
 
+        const handleDeclined = () => {
+            setIsCalling(false)
+        }
+
+        const handleCanceled = () => {
+            setIsRinging(false)
+        }
+
+        socket.on('canceled-call', handleCanceled)
+        socket.on('declined-call', handleDeclined)
         socket.on('call-request', handleRequest)
         socket.on('incoming-call', handleIncoming)
         socket.on('call-answered', handleAnswer)
@@ -192,6 +217,8 @@ export function useAudioCall() {
         socket.on('call-ended', handleEnd)
 
         return () => {
+            socket.off('canceled-call', handleCanceled)
+            socket.off('declined-call', handleDeclined)
             socket.off('call-request', handleRequest)
             socket.off('incoming-call', handleIncoming)
             socket.off('call-answered', handleAnswer)
@@ -208,6 +235,8 @@ export function useAudioCall() {
         isCalling,
         isRinging,
         inCall,
+        declineCall,
+        cancelCall,
         localStream,
         remoteStream
     }
