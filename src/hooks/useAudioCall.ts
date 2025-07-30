@@ -138,7 +138,6 @@ export function useAudioCall() {
         }
 
         const handleIncoming = async ({ from, sdp }: { from: string; sdp: string }) => {
-            if (isCallingRef.current) return
             peerIdRef.current = from
             setIsCalling(false)
             setInCall(true)
