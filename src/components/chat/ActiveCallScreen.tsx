@@ -1,4 +1,3 @@
-// src/components/chat/ActiveCallScreen.tsx
 import { useEffect, useRef } from 'react';
 import { useCall } from '../../contexts/CallContext';
 import { FaPhoneSlash } from 'react-icons/fa';
@@ -7,42 +6,20 @@ const ActiveCallScreen = () => {
     const { peerId, localStream, remoteStream, endCall } = useCall();
     const remoteAudioRef = useRef<HTMLAudioElement>(null);
     const localAudioRef = useRef<HTMLAudioElement>(null);
-    const prevRemoteStream = useRef<MediaStream | null>(null);
 
-    // 1. Manejo seguro del audio remoto
+    // Configuración directa de audio remoto
     useEffect(() => {
-        const audioEl = remoteAudioRef.current;
-        if (!audioEl || !remoteStream) return;
-
-        // Evitar recargar el mismo stream
-        if (remoteStream === prevRemoteStream.current) return;
-        prevRemoteStream.current = remoteStream;
-
-        // Asignar el stream
-        audioEl.srcObject = remoteStream;
-
-        // Reproducir con manejo de errores
-        const playAudio = () => {
-            audioEl.play().catch(e => {
+        if (remoteAudioRef.current && remoteStream) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.play().catch(e => {
                 if (e.name !== 'AbortError') {
                     console.error('Error en audio remoto:', e);
                 }
             });
-        };
-
-        // Intentar reproducir inmediatamente
-        playAudio();
-
-        // Configurar evento para reintentar si es necesario
-        audioEl.oncanplay = playAudio;
-
-        // Limpiar al desmontar
-        return () => {
-            audioEl.oncanplay = null;
-        };
+        }
     }, [remoteStream]);
 
-    // 2. Manejo del audio local (muteado)
+    // Configuración de audio local
     useEffect(() => {
         if (localAudioRef.current && localStream) {
             localAudioRef.current.srcObject = localStream;
@@ -55,7 +32,6 @@ const ActiveCallScreen = () => {
                 En llamada con <span className="font-semibold">{peerId}</span>
             </p>
 
-            {/* Elementos de audio */}
             <audio ref={remoteAudioRef} />
             <audio ref={localAudioRef} muted className="hidden" />
 

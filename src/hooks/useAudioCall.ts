@@ -1,4 +1,3 @@
-// src/hooks/useAudioCall.ts
 import {
     useReducer,
     useState,
@@ -251,54 +250,49 @@ export function useAudioCall(): UseAudioCallApi {
         }
     }, [socket, user, callId, initPeerConnection, peerId, cleanup])
 
-    // — Manejo de cambios de estado —————————————————————————————
-    useEffect(() => {
-        if (status === 'inCall' && peerId) {
-            // Iniciar la llamada: crear oferta
-            const startCall = async () => {
-                try {
-                    const pc = initPeerConnection()
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-                    setLocalStream(stream)
-                    stream.getTracks().forEach(track => pc.addTrack(track, stream))
-
-                    const offer = await pc.createOffer()
-                    await pc.setLocalDescription(offer)
-
-                    // Enviar oferta
-                    socket.emit('call-sdp', {
-                        callId: callId!,
-                        sdp: offer.sdp!,
-                        type: 'offer',
-                        from: user!.id,
-                        to: peerId
-                    } as CallSdpPayload)
-                } catch (err) {
-                    console.log("Error al comenzar la llamada: ", err)
-                    dispatch({ type: 'ERROR', payload: { message: 'Error al iniciar llamada' } })
-                    cleanup()
-                }
-            };
-            startCall();
-        }
-
-        if (status === 'idle') {
-            cleanup()
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status])
-
     // — Funciones de control —————————————————————————————————
-    const requestCall = useCallback((targetId: string) => {
+    const requestCall = useCallback(async (targetId: string) => {
         if (!socket || !user) return
         const id = uuidv4()
         dispatch({ type: 'REQUEST', payload: { callId: id, peerId: targetId } })
-        socket.emit('call-request', {
-            callId: id,
-            from: user.id,
-            to: targetId
-        } as CallRequestPayload)
 
+        try {
+            // 1. Crear PeerConnection inmediatamente
+            const pc = initPeerConnection()
+
+            // 2. Obtener stream local
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            setLocalStream(stream)
+            stream.getTracks().forEach(track => pc.addTrack(track, stream))
+
+            // 3. Crear oferta
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+
+            // 4. Enviar oferta
+            socket.emit('call-sdp', {
+                callId: id,
+                sdp: offer.sdp!,
+                type: 'offer',
+                from: user.id,
+                to: targetId
+            } as CallSdpPayload)
+
+            // 5. Enviar evento de solicitud de llamada
+            socket.emit('call-request', {
+                callId: id,
+                from: user.id,
+                to: targetId
+            } as CallRequestPayload)
+
+        } catch (err) {
+            console.error("Error al iniciar llamada:", err)
+            dispatch({ type: 'ERROR', payload: { message: 'Error al iniciar llamada' } })
+            cleanup()
+            return
+        }
+
+        // Configurar timeout para cancelar si no hay respuesta
         setTimeout(() => {
             if (status === 'calling' && callId === id) {
                 dispatch({ type: 'TIMEOUT' })
@@ -309,7 +303,7 @@ export function useAudioCall(): UseAudioCallApi {
                 } as CallSignalPayload)
             }
         }, 30_000)
-    }, [socket, user, status, callId])
+    }, [socket, user, status, callId, initPeerConnection, cleanup])
 
     const cancelCall = useCallback(() => {
         if (!socket || status !== 'calling' || !peerId || !user) return
