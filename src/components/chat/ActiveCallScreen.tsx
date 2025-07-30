@@ -5,45 +5,53 @@ import { FaPhoneSlash } from 'react-icons/fa';
 
 const ActiveCallScreen = () => {
     const { peerId, localStream, remoteStream, endCall } = useCall();
-    const remoteAudioRef = useRef<HTMLAudioElement>(null);
-    const localAudioRef = useRef<HTMLAudioElement>(null);
+    const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+    const localAudioRef = useRef<HTMLAudioElement | null>(null);
+    const prevRemoteStream = useRef<MediaStream | null>(null);
 
-    // Manejo seguro de los streams de audio
-    useEffect(() => {
-        // Capturar los elementos de audio actuales
-        const remoteAudioEl = remoteAudioRef.current;
-        const localAudioEl = localAudioRef.current;
+    // Configurar y reproducir audio remoto
+    const setupRemoteAudio = (el: HTMLAudioElement | null) => {
+        remoteAudioRef.current = el;
+        if (!el || !remoteStream) return;
 
-        // Configurar audio remoto
-        if (remoteAudioEl && remoteStream) {
-            remoteAudioEl.srcObject = remoteStream;
+        // Evitar recargar el mismo stream
+        if (remoteStream === prevRemoteStream.current) return;
+        prevRemoteStream.current = remoteStream;
 
-            // Intentar reproducir cuando el audio esté listo
-            const playRemoteAudio = () => {
-                remoteAudioEl.play().catch(e => {
-                    if (e.name !== 'AbortError') {
-                        console.error('Error al reproducir audio remoto:', e);
-                    }
-                });
-            };
-
-            remoteAudioEl.oncanplay = playRemoteAudio;
-            playRemoteAudio();
-        }
-
-        // Configurar audio local (siempre muteado)
-        if (localAudioEl && localStream) {
-            localAudioEl.srcObject = localStream;
-        }
-
-        // Limpiar al desmontar el componente
-        return () => {
-            if (remoteAudioEl) {
-                remoteAudioEl.oncanplay = null;
-                remoteAudioEl.srcObject = null;
+        // Asignar y reproducir inmediatamente
+        el.srcObject = remoteStream;
+        el.play().catch(e => {
+            if (e.name !== 'AbortError') {
+                console.error('Error al reproducir audio remoto:', e);
             }
-            if (localAudioEl) {
-                localAudioEl.srcObject = null;
+        });
+    };
+
+    // Configurar audio local (muteado)
+    const setupLocalAudio = (el: HTMLAudioElement | null) => {
+        localAudioRef.current = el;
+        if (el && localStream) {
+            el.srcObject = localStream;
+        }
+    };
+
+    // Limpieza al desmontar el componente
+    useEffect(() => {
+        return () => {
+            // Detener los streams al finalizar la llamada
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (remoteStream) {
+                remoteStream.getTracks().forEach(track => track.stop());
+            }
+
+            // Limpiar referencias
+            if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = null;
+            }
+            if (localAudioRef.current) {
+                localAudioRef.current.srcObject = null;
             }
         };
     }, [localStream, remoteStream]);
@@ -54,15 +62,25 @@ const ActiveCallScreen = () => {
                 En llamada con <span className="font-semibold">{peerId}</span>
             </p>
 
-            {/* Elementos de audio ocultos */}
-            <audio ref={remoteAudioRef} className="hidden" />
-            <audio ref={localAudioRef} muted className="hidden" />
+            {/* Audio remoto con la mecánica que funciona */}
+            <audio
+                ref={setupRemoteAudio}
+                autoPlay
+                className="hidden"
+            />
+
+            {/* Audio local (muteado) */}
+            <audio
+                ref={setupLocalAudio}
+                muted
+                className="hidden"
+            />
 
             <button
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded"
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded flex items-center"
                 onClick={endCall}
             >
-                <FaPhoneSlash className="inline mr-2" /> Colgar
+                <FaPhoneSlash className="mr-2" /> Colgar
             </button>
         </div>
     );
