@@ -15,7 +15,7 @@ const ChatWindow = () => {
     const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const socket = useSocket();
-    const { status, requestCall } = useCall()
+    const { requestCall } = useCall()
     console.log("El estado de la llamada es: ", status)
 
     const formatLastSeen = (lastSeen?: string | Date): string => {
