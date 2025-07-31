@@ -201,11 +201,13 @@ export function useAudioCall() {
         }
 
         const handleDeclined = () => {
-            setIsCalling(false)
+            console.log("Declined call")
+            cleanupCall()
         }
 
         const handleCanceled = () => {
-            setIsRinging(false)
+            console.log("Canceled call")
+            cleanupCall()
         }
 
         socket.on('canceled-call', handleCanceled)
