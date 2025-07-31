@@ -28,6 +28,14 @@ const ActiveCallScreen = () => {
     }, [localStream]);
 
     useEffect(() => {
+        if (localStream) {
+            localStream.getAudioTracks().forEach(track => {
+                track.enabled = !isMuted; // Esto sí silencia tu micro al transmitir
+            });
+        }
+    }, [isMuted, localStream]);
+
+    useEffect(() => {
         const timer = setInterval(() => {
             setCallDuration(prev => prev + 1);
         }, 1000);
@@ -67,8 +75,8 @@ const ActiveCallScreen = () => {
                         <button
                             onClick={() => setIsMuted(!isMuted)}
                             className={`p-5 rounded-full transition-all duration-300 ${isMuted
-                                    ? 'bg-rose-500 hover:bg-rose-600'
-                                    : 'bg-blue-500 hover:bg-blue-600'
+                                ? 'bg-rose-500 hover:bg-rose-600'
+                                : 'bg-blue-500 hover:bg-blue-600'
                                 }`}
                         >
                             {isMuted
