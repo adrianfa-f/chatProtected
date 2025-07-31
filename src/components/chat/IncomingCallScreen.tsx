@@ -1,6 +1,7 @@
 import { FaPhone, FaTimes } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 import { useEffect, useRef } from 'react';
+import ringtone from '../../assets/tonoCall/ringtone-126505.mp3'
 
 const IncomingCallScreen = () => {
     const { peerIdRef, startCall, declineCall, collingUserName } = useCall();
@@ -34,7 +35,7 @@ const IncomingCallScreen = () => {
 
             <audio
                 ref={audioRef}
-                src="../../assets/tonoCall/ringtone-126505.mp3"
+                src={ringtone}
                 loop
             />
 
