@@ -3,7 +3,7 @@ import { FaPhone, FaTimes } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 
 const IncomingCallScreen = () => {
-    const { peerIdRef, startCall, declineCall } = useCall();
+    const { peerIdRef, startCall, declineCall, collingUserName } = useCall();
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
@@ -13,7 +13,7 @@ const IncomingCallScreen = () => {
                         <div className="bg-gray-200 border-2 border-dashed rounded-full w-24 h-24" />
                     </div>
                     <h2 className="text-xl font-bold text-center mb-2">
-                        Llamada de <span className="text-purple-600">{peerIdRef.current}</span>
+                        Llamada de <span className="text-purple-600">{collingUserName}</span>
                     </h2>
                     <p className="text-gray-600 mb-6">¿Deseas responder?</p>
                     <div className="flex space-x-4">

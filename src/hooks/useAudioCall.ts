@@ -14,6 +14,7 @@ export function useAudioCall() {
     const isCallingRef = useRef(false)
 
     // estado Reactivo
+    const [collingUserName, setCollingUserName] = useState<string | null>(null);
     const [isCalling, setIsCalling] = useState(false)
     const [isRinging, setIsRinging] = useState(false);
     const [inCall, setInCall] = useState(false);
@@ -84,7 +85,8 @@ export function useAudioCall() {
         if (!socket || !user) return
         socket.emit("call-request", {
             from: user.id,
-            to: peerId
+            to: peerId,
+            userName: user.username
         })
         peerIdRef.current = peerId
         setIsCalling(true)
@@ -148,8 +150,9 @@ export function useAudioCall() {
     useEffect(() => {
         if (!socket || !user) return
 
-        const handleRequest = ({ from }: { from: string }) => {
+        const handleRequest = ({ from, userName }: { from: string, userName: string }) => {
             peerIdRef.current = from;
+            setCollingUserName(userName)
             setIsRinging(true)
         }
 
@@ -240,6 +243,7 @@ export function useAudioCall() {
         declineCall,
         cancelCall,
         localStream,
-        remoteStream
+        remoteStream,
+        collingUserName
     }
 }

@@ -1,9 +1,17 @@
 // src/components/chat/OutgoingCallScreen.tsx
 import { FaPhoneSlash } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
+import { useChat } from '../../contexts/ChatContext';
+import { useAuth } from '../../contexts/AuthContext'
 
 const OutgoingCallScreen = () => {
-    const { peerIdRef, cancelCall } = useCall(); // endCall ahora cancela la solicitud
+    const { cancelCall } = useCall();
+    const { user } = useAuth()
+    const { activeChat } = useChat()
+
+    if (!activeChat || !user) return
+
+    const otherUser = activeChat.user1.id === user.id ? activeChat.user2 : activeChat.user1
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
@@ -13,7 +21,7 @@ const OutgoingCallScreen = () => {
                         <div className="bg-gray-200 border-2 border-dashed rounded-full w-24 h-24" />
                     </div>
                     <h2 className="text-xl font-bold text-center mb-2">
-                        Llamando a <span className="text-purple-600">{peerIdRef.current}</span>
+                        Llamando a <span className="text-purple-600">{otherUser.username}</span>
                     </h2>
                     <p className="text-gray-600 mb-6">Esperando respuesta...</p>
                     <button
