@@ -2,18 +2,48 @@ import { FaPhoneSlash } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext'
+import { useEffect, useRef } from 'react';
 
 const OutgoingCallScreen = () => {
     const { cancelCall } = useCall();
     const { user } = useAuth()
     const { activeChat } = useChat()
+    const audioRef = useRef<HTMLAudioElement>(null);
+
+    useEffect(() => {
+        const audioElement = audioRef.current;
+
+        if (audioElement) {
+            audioElement.play().catch(e => console.log("Error al reproducir audio:", e));
+        }
+
+        return () => {
+            if (audioElement) {
+                audioElement.pause();
+                audioElement.currentTime = 0;
+            }
+        };
+    }, []);
 
     if (!activeChat || !user) return null;
 
     const otherUser = activeChat.user1.id === user.id ? activeChat.user2 : activeChat.user1;
 
+    const handleCancel = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+        cancelCall();
+    };
+
     return (
         <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 to-purple-800 flex flex-col items-center justify-center z-50">
+            <audio
+                ref={audioRef}
+                src="../../assets/tonoCall/phone-ringing-382734.mp3"
+                loop
+            />
             <div className="bg-white/10 backdrop-blur-lg p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center">
                 <div className="flex flex-col items-center">
                     <div className="relative mb-8">
@@ -29,7 +59,7 @@ const OutgoingCallScreen = () => {
                     <p className="text-gray-300 mb-8 animate-pulse">Esperando respuesta...</p>
 
                     <button
-                        onClick={cancelCall}
+                        onClick={handleCancel}
                         className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-full transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-red-500/30"
                     >
                         <FaPhoneSlash className="text-xl" />
