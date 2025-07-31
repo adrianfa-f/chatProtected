@@ -14,6 +14,16 @@ interface PushNotificationPayload {
     };
 }
 
+interface ExtendedNotificationOptions extends NotificationOptions {
+    actions?: Array<{
+        action: string;
+        title: string;
+        icon?: string;
+    }>;
+    requireInteraction?: boolean;
+    vibrate?: number[];
+}
+
 function base64ToBufferSW(base64: string): ArrayBuffer {
     const binaryString = atob(base64);
     const len = binaryString.length;
@@ -77,16 +87,42 @@ self.addEventListener('push', event => {
             }
 
             if (payload.data?.type === 'incoming-call') {
-                await self.registration.showNotification('Llamada entrante', {
+                // Usar el nuevo tipo extendido
+                const callNotificationOptions: ExtendedNotificationOptions = {
                     body: `${payload.data.username} te está llamando`,
                     icon: '/icon-call.png',
                     data: {
-                        url: `/chat/${payload.data.chatId}`, // ✅ Redirige al chat correspondiente
-                        ...payload.data
-                    }
-                });
+                        type: 'call',
+                        chatId: payload.data.chatId,
+                        from: payload.data.from,
+                        username: payload.data.username,
+                        userId: payload.data.userId
+                    },
+                    actions: [ // ✅ Ahora es válido
+                        { action: 'accept', title: '✅ Aceptar' },
+                        { action: 'reject', title: '❌ Rechazar' }
+                    ],
+                    requireInteraction: true,
+                    vibrate: [300, 100, 300]
+                };
+
+                await self.registration.showNotification(
+                    'Llamada entrante',
+                    callNotificationOptions
+                );
+
                 console.log('[SW] Notificación de llamada entrante mostrada');
-                return; // ✅ Evita desencriptar si es llamada
+
+                // Reproducir tono de llamada (opcional)
+                try {
+                    const ringtone = new Audio('/tonoCall/ringtone-126505.mp3');
+                    ringtone.loop = true;
+                    await ringtone.play();
+                } catch (e) {
+                    console.error('Error reproduciendo tono:', e);
+                }
+
+                return;
             }
 
             // 2) Intentar desencriptar payload.body (con límite de tiempo)
@@ -201,8 +237,67 @@ self.addEventListener('notificationclick', event => {
     event.notification.close();
 
     // 5. Usar tipo para los datos de la notificación
-    const notificationData = event.notification.data as { url?: string } || {};
+    const notificationData = event.notification.data as {
+        url?: string;
+        type?: string;
+        from?: string;
+        username?: string;
+        userId?: string;
+        chatId?: string;
+    } || {};
+
     console.log('[SW] Datos de notificación:', notificationData);
+
+    // Manejar acciones de llamada
+    if (notificationData.type === 'call') {
+        if (event.action === 'accept') {
+            console.log('[SW] Llamada aceptada desde notificación');
+
+            const url = `/chat/${notificationData.chatId}?call=accept&from=${notificationData.from}&username=${encodeURIComponent(notificationData.username || 'Usuario')}`;
+
+            event.waitUntil(
+                (async () => {
+                    const clients = await self.clients.matchAll({
+                        type: 'window',
+                        includeUncontrolled: true
+                    });
+
+                    const client = clients.find(c =>
+                        c.url.startsWith(self.registration.scope)
+                    );
+
+                    if (client) {
+                        await client.focus();
+                        // Enviar mensaje al cliente
+                        client.postMessage({
+                            type: 'CALL_ACTION',
+                            action: 'accept',
+                            from: notificationData.from,
+                            username: notificationData.username,
+                            chatId: notificationData.chatId
+                        });
+                    } else {
+                        await self.clients.openWindow(url);
+                    }
+                })()
+            );
+        }
+        else if (event.action === 'reject') {
+            console.log('[SW] Llamada rechazada desde notificación');
+
+            event.waitUntil(
+                fetch(`${process.env.API_URL}/api/calls/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        from: notificationData.from,
+                        to: notificationData.userId
+                    })
+                }).catch(err => console.error('Error al rechazar llamada:', err))
+            );
+        }
+        return;
+    }
 
     const url = notificationData.url || '/';
     console.log('[SW] URL objetivo:', url);

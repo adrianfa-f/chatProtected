@@ -1,12 +1,14 @@
 // src/hooks/useAudioCall.ts
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSocket } from '../contexts/SocketContext'    // retorna Socket | null
-import { useAuth } from '../contexts/AuthContext'        // { id: string; … }
+import { useAuth } from '../contexts/AuthContext'
+import { useChat } from '../contexts/ChatContext'        // { id: string; … }
 import { RTC_CONFIGURATION } from '../config/webrtc'     // TURN/STUN config
 
 export function useAudioCall() {
     const socket = useSocket()
     const { user } = useAuth()
+    const { activeChat } = useChat()
 
     // refs para PeerConnection, peer remoto y estado de llamada
     const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -82,15 +84,16 @@ export function useAudioCall() {
     }, [localStream, remoteStream])
 
     const requestCall = useCallback((peerId: string) => {
-        if (!socket || !user) return
+        if (!socket || !user || !activeChat) return
         socket.emit("call-request", {
             from: user.id,
             to: peerId,
-            userName: user.username
+            userName: user.username,
+            chatId: activeChat.id
         })
         peerIdRef.current = peerId
         setIsCalling(true)
-    }, [socket, user])
+    }, [socket, user, activeChat])
 
 
     // 1️⃣ startCall: quien inicia la llamada
@@ -231,6 +234,42 @@ export function useAudioCall() {
             socket.off('call-ended', handleEnd)
         }
     }, [socket, user, initPeerConnection, cleanupCall, inCall, isCalling])
+
+    useEffect(() => {
+        const handleServiceWorkerMessage = (event: MessageEvent) => {
+            if (event.data.type === 'CALL_ACTION' && event.data.action === 'accept') {
+                console.log('Aceptar llamada desde notificación');
+
+                // 1. Establecer peerId del llamante
+                peerIdRef.current = event.data.from;
+
+                // 2. Actualizar estado para mostrar pantalla de llamada entrante
+                setCollingUserName(event.data.username || 'Usuario');
+                setIsRinging(true);
+
+                // 3. (Opcional) Si ya tenemos el stream local, preparar llamada
+                if (!localStream) {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(stream => {
+                            setLocalStream(stream);
+                        })
+                        .catch(console.error);
+                }
+            }
+        };
+
+        navigator.serviceWorker?.addEventListener(
+            'message',
+            handleServiceWorkerMessage
+        );
+
+        return () => {
+            navigator.serviceWorker?.removeEventListener(
+                'message',
+                handleServiceWorkerMessage
+            );
+        };
+    }, [setCollingUserName, setIsRinging, localStream]);
 
     return {
         peerIdRef,

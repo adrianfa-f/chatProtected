@@ -13,7 +13,7 @@ import CallManager from './components/chat/CallManager';
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { user } = useAuth();
 
-  if (!user) return <Navigate to="/" replace />; // Añadir 'replace' evita historial extra
+  if (!user) return <Navigate to="/" replace />;
 
   return children;
 };
