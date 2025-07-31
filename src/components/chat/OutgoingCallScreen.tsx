@@ -3,7 +3,6 @@ import { useCall } from '../../contexts/CallContext';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext'
 import { useEffect, useRef } from 'react';
-import ringtone from '../../assets/tonoCall/phone-ringing-382734.mp3'
 
 const OutgoingCallScreen = () => {
     const { cancelCall } = useCall();
@@ -42,7 +41,7 @@ const OutgoingCallScreen = () => {
         <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 to-purple-800 flex flex-col items-center justify-center z-50">
             <audio
                 ref={audioRef}
-                src={ringtone}
+                src="/tonoCall/phone-ringing-382734.mp3"
                 loop
             />
             <div className="bg-white/10 backdrop-blur-lg p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center">
