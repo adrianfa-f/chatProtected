@@ -1,4 +1,3 @@
-// src/components/chat/IncomingCallScreen.tsx
 import { FaPhone, FaTimes } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
 
@@ -6,28 +5,33 @@ const IncomingCallScreen = () => {
     const { peerIdRef, startCall, declineCall, collingUserName } = useCall();
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 to-purple-800 flex flex-col items-center justify-center z-50">
+            <div className="bg-white/10 backdrop-blur-lg p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center">
                 <div className="flex flex-col items-center">
-                    <div className="mb-4">
-                        <div className="bg-gray-200 border-2 border-dashed rounded-full w-24 h-24" />
+                    <div className="relative mb-8">
+                        <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-green-500 to-teal-400 opacity-75 animate-pulse"></div>
+                        <div className="relative bg-gray-200 border-4 border-white rounded-full w-32 h-32 overflow-hidden">
+                            {/* Imagen de perfil aquí */}
+                        </div>
                     </div>
-                    <h2 className="text-xl font-bold text-center mb-2">
-                        Llamada de <span className="text-purple-600">{collingUserName}</span>
+
+                    <h2 className="text-2xl font-bold text-white mb-2">
+                        Llamada de <span className="text-yellow-300">{collingUserName}</span>
                     </h2>
-                    <p className="text-gray-600 mb-6">¿Deseas responder?</p>
-                    <div className="flex space-x-4">
+                    <p className="text-gray-300 mb-8">¿Deseas responder?</p>
+
+                    <div className="flex gap-6">
                         <button
-                            onClick={() => startCall(peerIdRef.current!)} // Ejecuta startCall al aceptar
-                            className="bg-green-500 text-white p-4 rounded-full hover:bg-green-600 transition"
+                            onClick={() => startCall(peerIdRef.current!)}
+                            className="bg-green-500 hover:bg-green-600 text-white p-5 rounded-full transition-all duration-300 shadow-lg hover:shadow-green-500/30"
                         >
-                            <FaPhone className="text-xl" />
+                            <FaPhone className="text-2xl" />
                         </button>
                         <button
                             onClick={declineCall}
-                            className="bg-red-500 text-white p-4 rounded-full hover:bg-red-600 transition"
+                            className="bg-red-500 hover:bg-red-600 text-white p-5 rounded-full transition-all duration-300 shadow-lg hover:shadow-red-500/30"
                         >
-                            <FaTimes className="text-xl" />
+                            <FaTimes className="text-2xl" />
                         </button>
                     </div>
                 </div>
