@@ -1,8 +1,8 @@
-import { type JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ChatProvider } from './contexts/ChatContext';
-import { SocketProvider } from './contexts/SocketContext';
+import { SocketProvider, useSocket } from './contexts/SocketContext';
 import { CallProvider } from './contexts/CallContext';
 import AuthPage from './pages/AuthPage';
 import ChatPage from './pages/ChatPage';
@@ -21,6 +21,31 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 const AppContent = () => {
   useChatSocket();
   const { user } = useAuth();
+  const socket = useSocket();
+
+  useEffect(() => {
+    if (!user || !socket) return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        socket.emit('disconnect', user.id);
+      }
+    };
+
+    const handleUnload = () => {
+      socket.emit('disconnect', user.id);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleUnload);
+    };
+  }, [user, socket]);
+
+
 
   return (
     <BrowserRouter
