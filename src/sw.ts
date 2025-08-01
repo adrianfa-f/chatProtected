@@ -89,21 +89,13 @@ self.addEventListener('push', event => {
             if (payload.data?.type === 'incoming-call') {
                 // Usar el nuevo tipo extendido
                 const callNotificationOptions: ExtendedNotificationOptions = {
-                    body: `${payload.data.username} te está llamando`,
-                    icon: '/icon-call.png',
+                    body: `${payload.body} te está llamando`,
+                    icon: payload.icon,
                     data: {
-                        type: 'call',
                         chatId: payload.data.chatId,
                         from: payload.data.from,
-                        username: payload.data.username,
-                        userId: payload.data.userId
+                        username: payload.body,
                     },
-                    actions: [ // ✅ Ahora es válido
-                        { action: 'accept', title: '✅ Aceptar' },
-                        { action: 'reject', title: '❌ Rechazar' }
-                    ],
-                    requireInteraction: true,
-                    vibrate: [300, 100, 300]
                 };
 
                 await self.registration.showNotification(

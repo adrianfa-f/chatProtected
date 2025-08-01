@@ -235,42 +235,6 @@ export function useAudioCall() {
         }
     }, [socket, user, initPeerConnection, cleanupCall, inCall, isCalling])
 
-    useEffect(() => {
-        const handleServiceWorkerMessage = (event: MessageEvent) => {
-            if (event.data.type === 'CALL_ACTION' && event.data.action === 'accept') {
-                console.log('Aceptar llamada desde notificación');
-
-                // 1. Establecer peerId del llamante
-                peerIdRef.current = event.data.from;
-
-                // 2. Actualizar estado para mostrar pantalla de llamada entrante
-                setCollingUserName(event.data.username || 'Usuario');
-                setIsRinging(true);
-
-                // 3. (Opcional) Si ya tenemos el stream local, preparar llamada
-                if (!localStream) {
-                    navigator.mediaDevices.getUserMedia({ audio: true })
-                        .then(stream => {
-                            setLocalStream(stream);
-                        })
-                        .catch(console.error);
-                }
-            }
-        };
-
-        navigator.serviceWorker?.addEventListener(
-            'message',
-            handleServiceWorkerMessage
-        );
-
-        return () => {
-            navigator.serviceWorker?.removeEventListener(
-                'message',
-                handleServiceWorkerMessage
-            );
-        };
-    }, [setCollingUserName, setIsRinging, localStream]);
-
     return {
         peerIdRef,
         requestCall,
