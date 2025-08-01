@@ -106,13 +106,13 @@ self.addEventListener('push', event => {
                 console.log('[SW] Notificación de llamada entrante mostrada');
 
                 // Reproducir tono de llamada (opcional)
-                /* try {
+                try {
                     const ringtone = new Audio('/tonoCall/ringtone-126505.mp3');
                     ringtone.loop = true;
                     await ringtone.play();
                 } catch (e) {
                     console.error('Error reproduciendo tono:', e);
-                } */
+                }
 
                 return;
             }
