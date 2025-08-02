@@ -26,6 +26,9 @@ export function useAudioCall() {
     useEffect(() => {
         const channel = new BroadcastChannel('call-channel');
 
+        // Notify SW that app is ready
+        channel.postMessage({ type: 'APP_READY' });
+
         channel.onmessage = (event) => {
             const { type, action, from, username } = event.data;
 

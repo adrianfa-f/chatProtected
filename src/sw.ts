@@ -262,6 +262,25 @@ self.addEventListener('notificationclick', event => {
                     await client.focus();
                 } else {
                     await self.clients.openWindow(url);
+
+                    // Wait for the app to signal it's ready
+                    const channel = new BroadcastChannel('call-channel');
+
+                    const waitForAppReady = new Promise<void>((resolve) => {
+                        const timeout = setTimeout(() => resolve(), 3000); // fallback timeout
+
+                        channel.onmessage = (event) => {
+                            if (event.data?.type === 'APP_READY') {
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        };
+                    });
+
+                    await waitForAppReady;
+
+                    channel.postMessage(callPayload);
+                    channel.close();
                 }
             })()
         );
