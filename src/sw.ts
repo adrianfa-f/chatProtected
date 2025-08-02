@@ -92,6 +92,7 @@ self.addEventListener('push', event => {
                     body: `${payload.body} te está llamando`,
                     icon: payload.icon,
                     data: {
+                        type: 'incoming-call',
                         chatId: payload.data.chatId,
                         from: payload.data.from,
                         username: payload.body,
