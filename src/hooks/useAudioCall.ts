@@ -23,6 +23,24 @@ export function useAudioCall() {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
 
+    useEffect(() => {
+        const channel = new BroadcastChannel('call-channel');
+
+        channel.onmessage = (event) => {
+            const { type, action, from, username } = event.data;
+
+            if (type === 'CALL_ACTION' && action === 'accept') {
+                peerIdRef.current = from;
+                setIsRinging(true);
+                setCollingUserName(username);
+            }
+        };
+
+        return () => {
+            channel.close();
+        };
+    }, []);
+
     // sincronizar ref con estado
     useEffect(() => {
         isCallingRef.current = isCalling

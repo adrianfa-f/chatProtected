@@ -231,53 +231,41 @@ self.addEventListener('notificationclick', event => {
     console.log('[SW] Datos de notificación:', notificationData);
 
     // Manejar acciones de llamada
-    if (notificationData.type === 'call') {
-        if (event.action === 'accept') {
-            console.log('[SW] Llamada aceptada desde notificación');
+    if (notificationData.type === 'call' || notificationData.type === 'incoming-call') {
+        const url = `/chat/${notificationData.chatId}?call=accept&from=${notificationData.from}&username=${encodeURIComponent(notificationData.username || 'Usuario')}`;
 
-            const url = `/chat/${notificationData.chatId}?call=accept&from=${notificationData.from}&username=${encodeURIComponent(notificationData.username || 'Usuario')}`;
+        event.waitUntil(
+            (async () => {
+                const clients = await self.clients.matchAll({
+                    type: 'window',
+                    includeUncontrolled: true
+                });
 
-            event.waitUntil(
-                (async () => {
-                    const clients = await self.clients.matchAll({
-                        type: 'window',
-                        includeUncontrolled: true
-                    });
+                const client = clients.find(c =>
+                    c.url.startsWith(self.registration.scope)
+                );
 
-                    const client = clients.find(c =>
-                        c.url.startsWith(self.registration.scope)
-                    );
+                // ✅ Broadcast call data to all open tabs
+                const callPayload = {
+                    type: 'CALL_ACTION',
+                    action: 'accept',
+                    from: notificationData.from,
+                    username: notificationData.username,
+                    chatId: notificationData.chatId
+                };
 
-                    if (client) {
-                        await client.focus();
-                        // Enviar mensaje al cliente
-                        client.postMessage({
-                            type: 'CALL_ACTION',
-                            action: 'accept',
-                            from: notificationData.from,
-                            username: notificationData.username,
-                            chatId: notificationData.chatId
-                        });
-                    } else {
-                        await self.clients.openWindow(url);
-                    }
-                })()
-            );
-        }
-        else if (event.action === 'reject') {
-            console.log('[SW] Llamada rechazada desde notificación');
+                const channel = new BroadcastChannel('call-channel');
+                channel.postMessage(callPayload);
+                channel.close();
 
-            event.waitUntil(
-                fetch(`${process.env.API_URL}/api/calls/reject`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        from: notificationData.from,
-                        to: notificationData.userId
-                    })
-                }).catch(err => console.error('Error al rechazar llamada:', err))
-            );
-        }
+                if (client) {
+                    await client.focus();
+                } else {
+                    await self.clients.openWindow(url);
+                }
+            })()
+        );
+
         return;
     }
 
