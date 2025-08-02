@@ -95,6 +95,7 @@ self.addEventListener('push', event => {
                         chatId: payload.data.chatId,
                         from: payload.data.from,
                         username: payload.body,
+                        url: payload.data.url
                     },
                 };
 
@@ -232,7 +233,8 @@ self.addEventListener('notificationclick', event => {
 
     // Manejar acciones de llamada
     if (notificationData.type === 'call' || notificationData.type === 'incoming-call') {
-        const url = `/chat/${notificationData.chatId}?call=accept&from=${notificationData.from}&username=${encodeURIComponent(notificationData.username || 'Usuario')}`;
+        const url = notificationData.url || "/";
+        console.log("Establecida URL: ", url)
 
         event.waitUntil(
             (async () => {
@@ -244,6 +246,7 @@ self.addEventListener('notificationclick', event => {
                 const client = clients.find(c =>
                     c.url.startsWith(self.registration.scope)
                 );
+                console.log("CLientes encontrado: ", clients)
 
                 // ✅ Broadcast call data to all open tabs
                 const callPayload = {
@@ -253,6 +256,7 @@ self.addEventListener('notificationclick', event => {
                     username: notificationData.username,
                     chatId: notificationData.chatId
                 };
+                console.log("callPlayload: ", callPayload)
 
                 const channel = new BroadcastChannel('call-channel');
                 channel.postMessage(callPayload);
@@ -261,6 +265,7 @@ self.addEventListener('notificationclick', event => {
                 if (client) {
                     await client.focus();
                 } else {
+                    console.log("No hay cliente hay que abrir una nueva ventana")
                     await self.clients.openWindow(url);
 
                     // Wait for the app to signal it's ready
@@ -280,6 +285,7 @@ self.addEventListener('notificationclick', event => {
                     await waitForAppReady;
 
                     channel.postMessage(callPayload);
+                    console.log("postMessage enviado")
                     channel.close();
                 }
             })()
