@@ -25,9 +25,10 @@ const AppContent = () => {
 
   useEffect(() => {
     if (!user || !socket) return
-
+    console.log("Visibilidad del documento: ", document.visibilityState)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
+        console.log("La pagina no es visible, desconetamos del socket")
         socket.emit('disconnect', user.id);
       }
     };
