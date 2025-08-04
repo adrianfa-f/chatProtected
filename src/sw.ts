@@ -98,6 +98,7 @@ self.addEventListener('push', event => {
                     icon: payload.icon,
                     tag: payload.tag,
                     renotify: true,
+                    vibrate: [300, 100, 300, 100, 500],
                     data: {
                         type: 'incoming-call',
                         chatId: payload.data.chatId,
@@ -122,6 +123,7 @@ self.addEventListener('push', event => {
                     icon: '/missed-call.png',
                     tag: payload.tag,
                     renotify: true,
+                    vibrate: [200, 100, 200],
                     data: {
                         type: payload.data.type,
                         chatId: payload.data.chatId,

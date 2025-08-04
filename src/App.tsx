@@ -24,17 +24,20 @@ const AppContent = () => {
   const socket = useSocket();
 
   useEffect(() => {
-    if (!user || !socket) return
-    console.log("Visibilidad del documento: ", document.visibilityState)
+    if (!user || !socket) return;
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        console.log("La pagina no es visible, desconetamos del socket")
-        socket.emit('disconnect', user.id);
+        console.log("La página no es visible, notificamos desconexión");
+        socket.emit('manual-disconnect', { userId: user.id });
+      } else {
+        console.log("La página volvió a ser visible, notificamos reconexión");
+        socket.emit('manual-reconnect', { userId: user.id });
       }
     };
 
     const handleUnload = () => {
-      socket.emit('disconnect', user.id);
+      socket.emit('manual-disconnect', { userId: user.id });
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -45,6 +48,7 @@ const AppContent = () => {
       window.removeEventListener('beforeunload', handleUnload);
     };
   }, [user, socket]);
+
 
 
 
