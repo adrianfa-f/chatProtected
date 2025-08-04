@@ -1,43 +1,21 @@
 import { FaPhone, FaTimes } from 'react-icons/fa';
 import { useCall } from '../../contexts/CallContext';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { playRingtone, stopRingtone } from '../../utils/ringtonePlayer';
 
 const IncomingCallScreen = () => {
     const { peerIdRef, startCall, declineCall, collingUserName } = useCall();
-    const audioRef = useRef<HTMLAudioElement>(null);
 
     useEffect(() => {
-        const audioElement = audioRef.current;
-
-        if (audioElement) {
-            audioElement.play().catch(e => console.log("Error al reproducir audio:", e));
-        }
+        playRingtone("/tonoCall/ringtone-126505.mp3");
 
         return () => {
-            if (audioElement) {
-                audioElement.pause();
-                audioElement.currentTime = 0;
-            }
+            stopRingtone();
         };
     }, []);
 
-    const handleCancel = () => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-        }
-        declineCall();
-    };
-
     return (
         <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 to-purple-800 flex flex-col items-center justify-center z-50">
-
-            <audio
-                ref={audioRef}
-                src="/tonoCall/ringtone-126505.mp3"
-                loop
-            />
-
             <div className="bg-white/10 backdrop-blur-lg p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4 text-center">
                 <div className="flex flex-col items-center">
                     <div className="relative mb-8">
@@ -60,7 +38,7 @@ const IncomingCallScreen = () => {
                             <FaPhone className="text-2xl" />
                         </button>
                         <button
-                            onClick={handleCancel}
+                            onClick={declineCall}
                             className="bg-red-500 hover:bg-red-600 text-white p-5 rounded-full transition-all duration-300 shadow-lg hover:shadow-red-500/30"
                         >
                             <FaTimes className="text-2xl" />
