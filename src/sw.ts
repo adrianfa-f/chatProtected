@@ -7,6 +7,8 @@ declare const self: ServiceWorkerGlobalScope;
 interface PushNotificationPayload {
     title: string;
     body: string;
+    tag: string;
+    renotify: true,
     icon?: string;
     data?: {
         url?: string;
@@ -15,6 +17,7 @@ interface PushNotificationPayload {
 }
 
 interface ExtendedNotificationOptions extends NotificationOptions {
+    renotify?: boolean;
     actions?: Array<{
         action: string;
         title: string;
@@ -71,6 +74,8 @@ self.addEventListener('push', event => {
             const genericNotification: PushNotificationPayload = {
                 title: 'Nuevo mensaje',
                 body: 'Tienes un nuevo mensaje',
+                tag: 'Nuevo mensaje',
+                renotify: true,
                 icon: '/icon-192x192.png'
             };
 
@@ -91,6 +96,8 @@ self.addEventListener('push', event => {
                 const callNotificationOptions: ExtendedNotificationOptions = {
                     body: `${payload.body} te está llamando`,
                     icon: payload.icon,
+                    tag: payload.tag,
+                    renotify: true,
                     data: {
                         type: 'incoming-call',
                         chatId: payload.data.chatId,
@@ -102,6 +109,30 @@ self.addEventListener('push', event => {
 
                 await self.registration.showNotification(
                     'Llamada entrante',
+                    callNotificationOptions
+                );
+
+                console.log('[SW] Notificación de llamada entrante mostrada');
+                return;
+            }
+
+            if (payload.data?.type === 'cancel-call') {
+                const callNotificationOptions: ExtendedNotificationOptions = {
+                    body: `Llamada perdida de ${payload.body}`,
+                    icon: '/missed-call.png',
+                    tag: payload.tag,
+                    renotify: true,
+                    data: {
+                        type: payload.data.type,
+                        chatId: payload.data.chatId,
+                        from: payload.data.from,
+                        username: payload.body,
+                        url: payload.data.url
+                    },
+                };
+
+                await self.registration.showNotification(
+                    'Llamada perdida',
                     callNotificationOptions
                 );
 
@@ -205,6 +236,7 @@ self.addEventListener('push', event => {
             const notificationOptions: NotificationOptions = {
                 body: decryptedBody,
                 icon: payload.icon || '/icon-192x192.png',
+                tag: payload.tag,
                 data: payload.data || {}
             };
             await self.registration.showNotification(

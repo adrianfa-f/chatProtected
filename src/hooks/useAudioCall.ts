@@ -148,11 +148,16 @@ export function useAudioCall() {
     )
 
     const cancelCall = useCallback(() => {
-        if (!socket) return
-        socket.emit('cancel-call', { to: peerIdRef.current })
+        if (!socket || !user) return
+        socket.emit('cancel-call', {
+            to: peerIdRef.current,
+            from: user?.id,
+            userName: user?.username,
+            chatId: activeChat?.id
+        })
 
         setIsCalling(false)
-    }, [socket])
+    }, [socket, user, activeChat])
 
     const declineCall = useCallback(() => {
         if (!socket) return
