@@ -267,9 +267,16 @@ self.addEventListener('notificationclick', event => {
     console.log('[SW] Datos de notificación:', notificationData);
 
     // Manejar acciones de llamada
-    if (notificationData.type === 'call' || notificationData.type === 'incoming-call') {
-        const url = notificationData.url || "/";
-        console.log("Establecida URL: ", url)
+    if (notificationData.type === 'incoming-call' || notificationData.type === 'cancel-call') {
+        const baseUrl = notificationData.url || "/";
+        const urlParams = new URLSearchParams({
+            notification_type: notificationData.type,
+            from: notificationData.from || '',
+            username: notificationData.username || '',
+            chatId: notificationData.chatId || '',
+            userId: notificationData.userId || ''
+        });
+        const targetUrl = `${baseUrl}?${urlParams.toString()}#call`;
 
         event.waitUntil(
             (async () => {
@@ -281,51 +288,15 @@ self.addEventListener('notificationclick', event => {
                 const client = clients.find(c =>
                     c.url.startsWith(self.registration.scope)
                 );
-                console.log("CLientes encontrado: ", clients)
-
-                // ✅ Broadcast call data to all open tabs
-                const callPayload = {
-                    type: 'CALL_ACTION',
-                    action: 'accept',
-                    from: notificationData.from,
-                    username: notificationData.username,
-                    chatId: notificationData.chatId
-                };
-                console.log("callPlayload: ", callPayload)
-
-                const channel = new BroadcastChannel('call-channel');
-                channel.postMessage(callPayload);
-                channel.close();
 
                 if (client) {
+                    await client.navigate(targetUrl);
                     await client.focus();
                 } else {
-                    console.log("No hay cliente hay que abrir una nueva ventana")
-                    await self.clients.openWindow(url);
-
-                    // Wait for the app to signal it's ready
-                    const channel = new BroadcastChannel('call-channel');
-
-                    const waitForAppReady = new Promise<void>((resolve) => {
-                        const timeout = setTimeout(() => resolve(), 3000); // fallback timeout
-
-                        channel.onmessage = (event) => {
-                            if (event.data?.type === 'APP_READY') {
-                                clearTimeout(timeout);
-                                resolve();
-                            }
-                        };
-                    });
-
-                    await waitForAppReady;
-
-                    channel.postMessage(callPayload);
-                    console.log("postMessage enviado")
-                    channel.close();
+                    await self.clients.openWindow(targetUrl);
                 }
             })()
         );
-
         return;
     }
 

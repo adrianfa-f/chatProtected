@@ -24,23 +24,35 @@ export function useAudioCall() {
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
 
     useEffect(() => {
-        const channel = new BroadcastChannel('call-channel');
+        // Procesar parámetros de URL al cargar la app
+        const urlParams = new URLSearchParams(window.location.search);
+        const notificationType = urlParams.get('notification_type');
+        const from = urlParams.get('from');
+        const username = urlParams.get('username');
 
-        // Notify SW that app is ready
-        channel.postMessage({ type: 'APP_READY' });
+        if (notificationType === 'incoming-call' && from && username) {
+            peerIdRef.current = from;
+            setIsRinging(true);
+            setCollingUserName(username);
 
-        channel.onmessage = (event) => {
-            const { type, action, from, username } = event.data;
+            // Limpiar la URL después de procesar
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState(null, '', cleanUrl);
+        }
 
-            if (type === 'CALL_ACTION' && action === 'accept') {
-                peerIdRef.current = from;
+        // Escuchar mensajes del Service Worker (para cuando la app ya está abierta)
+        const handleServiceWorkerMessage = (event: MessageEvent) => {
+            if (event.data.type === 'CALL_ACTION' && event.data.action === 'accept') {
+                peerIdRef.current = event.data.from;
                 setIsRinging(true);
-                setCollingUserName(username);
+                setCollingUserName(event.data.username);
             }
         };
 
+        navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+
         return () => {
-            channel.close();
+            navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
         };
     }, []);
 
