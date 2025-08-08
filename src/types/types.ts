@@ -39,6 +39,19 @@ export interface ChatRequest {
     timestamp: Date;
 }
 
+export interface Call {
+    id: string;
+    fromUserId: string;
+    toUserId: string;
+    status: 'missed' | 'rejected' | 'answered';
+    seen: boolean;
+    startedAt: Date;
+    endedAt?: Date;
+    createdAt: Date;
+    fromUser: User;
+    toUser: User;
+}
+
 // Nuevo tipo para almacenamiento local
 export interface LocalMessageStore {
     [chatId: string]: {

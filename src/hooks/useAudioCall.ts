@@ -4,6 +4,8 @@ import { useSocket } from '../contexts/SocketContext'    // retorna Socket | nul
 import { useAuth } from '../contexts/AuthContext'
 import { useChat } from '../contexts/ChatContext'        // { id: string; … }
 import { RTC_CONFIGURATION } from '../config/webrtc'     // TURN/STUN config
+import type { Call } from '../types/types'
+import api from '../services/api'
 
 export function useAudioCall() {
     const socket = useSocket()
@@ -22,6 +24,19 @@ export function useAudioCall() {
     const [inCall, setInCall] = useState(false);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+    const [calls, setCalls] = useState<Call[]>([]);
+
+    useEffect(() => {
+        const loadCalls = async () => {
+            try {
+                const response = await api.get('/api/calls/');
+                setCalls(response.data);
+            } catch (err) {
+                console.error("Error cargando llamadas:", err);
+            }
+        };
+        loadCalls();
+    }, [user]);
 
     useEffect(() => {
         // Procesar parámetros de URL al cargar la app
@@ -173,10 +188,13 @@ export function useAudioCall() {
 
     const declineCall = useCallback(() => {
         if (!socket) return
-        socket?.emit("decline-call", { to: peerIdRef.current })
+        socket?.emit("decline-call", {
+            to: peerIdRef.current,
+            from: user?.id,
+        })
 
         setIsRinging(false)
-    }, [socket])
+    }, [socket, user])
 
     // 2️⃣ endCall: cuelga la llamada
     const endCall = useCallback(() => {
@@ -285,6 +303,7 @@ export function useAudioCall() {
         cancelCall,
         localStream,
         remoteStream,
-        collingUserName
+        collingUserName,
+        calls
     }
 }

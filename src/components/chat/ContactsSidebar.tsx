@@ -3,13 +3,15 @@ import { useChat } from '../../contexts/ChatContext';
 import StartNewChatModal from './StartNewChatModal';
 import ChatList from './ChatList';
 import ChatRequestList from './ChatRequestList';
-import { FaSearch, FaUserPlus, FaComments, FaBell, FaTimes } from 'react-icons/fa';
+import { FaSearch, FaUserPlus, FaComments, FaBell, FaTimes, FaPhone } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Chat } from '../../types/types';
+import CallList from './CallList';
+import { useCall } from '../../contexts/CallContext';
 
 interface ContactsSidebarProps {
-    activeTab: 'chats' | 'requests';
-    setActiveTab: (tab: 'chats' | 'requests') => void;
+    activeTab: 'chats' | 'requests' | 'calls';
+    setActiveTab: (tab: 'chats' | 'requests' | 'calls') => void;
     onSelectChat: (chat: Chat) => void;
 }
 
@@ -25,6 +27,7 @@ const ContactsSidebar = ({
         loadChatRequests
     } = useChat();
     const { user } = useAuth();
+    const { calls } = useCall()
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -144,6 +147,17 @@ const ContactsSidebar = ({
                             </span>
                         )}
                     </button>
+
+                    <button
+                        className={`flex items-center py-3 px-4 relative ${activeTab === 'calls'
+                                ? 'text-white border-b-2 border-purple-500'
+                                : 'text-gray-300 hover:text-white'
+                            }`}
+                        onClick={() => setActiveTab('calls')}
+                    >
+                        <FaPhone className="mr-2" />
+                        <span>Llamadas</span>
+                    </button>
                 </div>
             </div>
 
@@ -154,12 +168,18 @@ const ContactsSidebar = ({
                         chats={chats}
                         onSelectChat={onSelectChat}
                     />
-                ) : (
+                ) : activeTab === 'requests' ? (
                     <ChatRequestList
                         requests={chatRequests}
                         user={user}
                     />
+                ) : (
+                    <CallList
+                        calls={calls}
+                        currentUserId={user?.id || ''}
+                    />
                 )}
+
             </div>
 
             <StartNewChatModal
