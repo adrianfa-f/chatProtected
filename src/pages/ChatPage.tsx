@@ -4,7 +4,7 @@ import ContactsSidebar from '../components/chat/ContactsSidebar';
 import type { Chat } from '../types/types';
 
 const ChatPage = () => {
-    const [activeTab, setActiveTab] = useState<'chats' | 'requests'>('chats');
+    const [activeTab, setActiveTab] = useState<'chats' | 'requests' | 'calls'>('chats');
     const navigate = useNavigate();
 
     const handleSelectChat = (chat: Chat) => {
