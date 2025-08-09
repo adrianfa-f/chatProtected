@@ -22,7 +22,7 @@ const CallList = ({ calls, currentUserId }: CallListProps) => {
             status: call.status,
             isOutgoing,
             duration,
-            date: new Date(call.startedAt)
+            date: new Date(call.createdAt)
         };
     };
 
