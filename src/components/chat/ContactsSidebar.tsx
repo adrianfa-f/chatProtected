@@ -27,7 +27,7 @@ const ContactsSidebar = ({
         loadChatRequests
     } = useChat();
     const { user } = useAuth();
-    const { calls } = useCall()
+    const { calls, missedCount } = useCall()
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -150,13 +150,18 @@ const ContactsSidebar = ({
 
                     <button
                         className={`flex items-center py-3 px-4 relative ${activeTab === 'calls'
-                                ? 'text-white border-b-2 border-purple-500'
-                                : 'text-gray-300 hover:text-white'
+                            ? 'text-white border-b-2 border-purple-500'
+                            : 'text-gray-300 hover:text-white'
                             }`}
                         onClick={() => setActiveTab('calls')}
                     >
                         <FaPhone className="mr-2" />
                         <span>Llamadas</span>
+                        {missedCount > 0 && (
+                            <div className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                                {missedCount}
+                            </div>
+                        )}
                     </button>
                 </div>
             </div>

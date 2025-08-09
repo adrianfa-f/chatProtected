@@ -25,14 +25,17 @@ export function useAudioCall() {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
     const [calls, setCalls] = useState<Call[]>([]);
+    const [missedCount, setMissedCount] = useState<number>(0);
 
     useEffect(() => {
         const loadCalls = async () => {
             try {
                 const response = await api.get('/api/calls/');
                 setCalls(response.data);
+                const responseMissedCount = await api.get('/api/calls/missed-count')
+                setMissedCount(responseMissedCount.data)
             } catch (err) {
-                console.error("Error cargando llamadas:", err);
+                console.error("Error cargando llamadas o conteo de llamdas perdidas:", err);
             }
         };
         loadCalls();
@@ -103,6 +106,15 @@ export function useAudioCall() {
 
         return pc
     }, [socket, user])
+
+    const markAsSeen = useCallback(async () => {
+        try {
+            const responce = await api.put('/api/calls/mark-seen');
+            console.log("Respuesta de marcar como seen: ", responce)
+        } catch (err) {
+            console.log("Errora al marcar como visto las llamdas perdidas: ", err)
+        }
+    }, [])
 
     // limpia todo al colgar: detiene micrófono, cierra PC y resetea estados
     const cleanupCall = useCallback(() => {
@@ -200,7 +212,6 @@ export function useAudioCall() {
     const endCall = useCallback(() => {
         if (!socket || !user) return
         const target = peerIdRef.current
-        console.log("PeerId al cerrar call: ", target)
         socket.emit('end-call', { from: user.id, to: target })
         cleanupCall()
     }, [socket, user, cleanupCall])
@@ -254,6 +265,13 @@ export function useAudioCall() {
             await pcRef.current.addIceCandidate(candidate)
         }
 
+        const handleNewCall = ({ call }: { call: Call }) => {
+            setCalls(prev => [call, ...prev]);
+            if (call.status === 'missed' && call.toUserId === user.id && !call.seen) {
+                setMissedCount(prev => prev + 1);
+            }
+        }
+
         const handleEnd = ({ from }: { from: string }) => {
             console.log("peerIdRef.current: ", peerIdRef.current)
             console.log("from: ", from)
@@ -272,6 +290,7 @@ export function useAudioCall() {
             cleanupCall()
         }
 
+        socket.on('new-call', handleNewCall)
         socket.on('canceled-call', handleCanceled)
         socket.on('declined-call', handleDeclined)
         socket.on('call-request', handleRequest)
@@ -304,6 +323,9 @@ export function useAudioCall() {
         localStream,
         remoteStream,
         collingUserName,
-        calls
+        calls,
+        missedCount,
+        setMissedCount,
+        markAsSeen
     }
 }

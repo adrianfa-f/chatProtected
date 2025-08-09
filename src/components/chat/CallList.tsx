@@ -3,6 +3,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { FaPhone, FaPhoneSlash, FaClock, FaUser } from 'react-icons/fa';
 import type { Call } from '../../types/types';
+import { useCall } from '../../contexts/CallContext';
 
 interface CallListProps {
     calls: Call[];
@@ -17,6 +18,7 @@ const CallList = ({ calls, currentUserId }: CallListProps) => {
             ? Math.round((new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000)
             : 0;
 
+
         return {
             username: otherUser.username,
             status: call.status,
@@ -25,6 +27,10 @@ const CallList = ({ calls, currentUserId }: CallListProps) => {
             date: new Date(call.createdAt)
         };
     };
+
+    const { setMissedCount, markAsSeen } = useCall()
+    setMissedCount(0)
+    markAsSeen()
 
     const statusIcons = {
         answered: <FaPhone className="text-green-500" />,
