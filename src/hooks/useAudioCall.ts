@@ -33,7 +33,7 @@ export function useAudioCall() {
                 const response = await api.get('/api/calls/');
                 setCalls(response.data);
                 const responseMissedCount = await api.get('/api/calls/missed-count')
-                setMissedCount(responseMissedCount.data)
+                setMissedCount(responseMissedCount.data.count)
             } catch (err) {
                 console.error("Error cargando llamadas o conteo de llamdas perdidas:", err);
             }
@@ -265,7 +265,7 @@ export function useAudioCall() {
             await pcRef.current.addIceCandidate(candidate)
         }
 
-        const handleNewCall = ({ call }: { call: Call }) => {
+        const handleNewCall = (call: Call) => {
             setCalls(prev => [call, ...prev]);
             if (call.status === 'missed' && call.toUserId === user.id && !call.seen) {
                 setMissedCount(prev => prev + 1);
