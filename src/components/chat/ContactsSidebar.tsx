@@ -28,6 +28,7 @@ const ContactsSidebar = ({
     } = useChat();
     const { user } = useAuth();
     const { calls, missedCount } = useCall()
+    console.log("Count en ContactSidebar: ", missedCount)
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');

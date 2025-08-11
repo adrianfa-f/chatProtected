@@ -33,13 +33,15 @@ export function useAudioCall() {
                 const response = await api.get('/api/calls/');
                 setCalls(response.data);
                 const responseMissedCount = await api.get('/api/calls/missed-count')
+                console.log("Response de count: ", response)
                 setMissedCount(responseMissedCount.data.count)
+                console.log("Count: ", missedCount)
             } catch (err) {
                 console.error("Error cargando llamadas o conteo de llamdas perdidas:", err);
             }
         };
         loadCalls();
-    }, [user]);
+    }, [user, missedCount]);
 
     useEffect(() => {
         // Procesar parámetros de URL al cargar la app
