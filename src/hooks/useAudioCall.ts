@@ -267,10 +267,15 @@ export function useAudioCall() {
         }
 
         const handleNewCall = (call: Call) => {
+            console.log("Call en newCall: ", call)
+            console.log("Call.fromUser en newCall: ", call.fromUser)
+            console.log("Call.toUser en newCall: ", call.toUser)
             if (call && call.fromUser && call.toUser) {
                 setCalls(prev => [call, ...prev]);
                 if (call.status === 'missed' && call.toUserId === user.id && !call.seen) {
+                    console.log("Count antes en newCall: ")
                     setMissedCount(prev => prev + 1);
+                    console.log("Count despues en newCall: ")
                 }
             } else {
                 console.error("Estructura de call inválida:", call);
