@@ -266,11 +266,15 @@ export function useAudioCall() {
         }
 
         const handleNewCall = (call: Call) => {
-            setCalls(prev => [call, ...prev]);
-            if (call.status === 'missed' && call.toUserId === user.id && !call.seen) {
-                setMissedCount(prev => prev + 1);
+            if (call && call.fromUser && call.toUser) {
+                setCalls(prev => [call, ...prev]);
+                if (call.status === 'missed' && call.toUserId === user.id && !call.seen) {
+                    setMissedCount(prev => prev + 1);
+                }
+            } else {
+                console.error("Estructura de call inválida:", call);
             }
-        }
+        };
 
         const handleEnd = ({ from }: { from: string }) => {
             console.log("peerIdRef.current: ", peerIdRef.current)
