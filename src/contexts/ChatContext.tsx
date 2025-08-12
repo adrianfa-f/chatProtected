@@ -96,7 +96,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
             const textMessages: Message[] = await api.get(`/api/messages/${chatId}`).then(res => res.data.data);
 
             // 3. Obtener archivos multimedia
-            const mediaFiles: MediaFile[] = await api.get(`/upload/${chatId}`).then(res => res.data);
+            const mediaFiles: MediaFile[] = await api.get(`/api/upload/${chatId}`).then(res => res.data);
 
             // 4. Procesar solo los mensajes de texto
             const processedTextMessages = await Promise.all(
