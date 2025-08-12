@@ -126,13 +126,14 @@ const ChatWindow = () => {
                 <div className="max-w-3xl mx-auto">
                     {messages
                         .filter(msg => msg.chatId === activeChat.id)
-                        .map(message => (
+                        .map(item => (
                             <MessageBubble
-                                key={message.id}
-                                message={message}
-                                isOwn={message.senderId === user.id}
+                                key={item.id}
+                                item={item}
+                                isOwn={'senderId' in item ? item.senderId === user.id : false}
                             />
-                        ))}
+                        ))
+                    }
                     <div ref={messagesEndRef} />
                 </div>
             </div>

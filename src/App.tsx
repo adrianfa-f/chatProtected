@@ -21,36 +21,6 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
 const AppContent = () => {
   useChatSocket();
   const { user } = useAuth();
-  /* const socket = useSocket(); */
-
-  /* useEffect(() => {
-    if (!user || !socket) return;
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        console.log("La página no es visible, notificamos desconexión");
-        socket.emit('manual-disconnect', { userId: user.id });
-      } else {
-        console.log("La página volvió a ser visible, notificamos reconexión");
-        socket.emit('manual-reconnect', { userId: user.id });
-      }
-    };
-
-    const handleUnload = () => {
-      socket.emit('manual-disconnect', { userId: user.id });
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleUnload);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleUnload);
-    };
-  }, [user, socket]); */
-
-
-
 
   return (
     <BrowserRouter

@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { useSocket } from '../contexts/SocketContext';
 import { useChat } from '../contexts/ChatContext';
-import type { ChatRequest, Message } from '../types/types';
+import type { ChatRequest, MediaFile, Message } from '../types/types';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useChatSocket = () => {
     const socket = useSocket();
-    const { addMessage, setUserOnlineStatus, addChatRequest, loadChats, setChatRequests, setChats } = useChat();
+    const { addMessage, setUserOnlineStatus, addChatRequest, loadChats, setChatRequests, setChats, activeChat, addMediaFile } = useChat();
     const { logout, user } = useAuth();
 
     useEffect(() => {
@@ -107,6 +107,28 @@ export const useChatSocket = () => {
             /* logout(); */
         };
 
+        const handleReceiveMedia = (media: MediaFile) => {
+            console.log('[useChatSocket] Archivo multimedia recibido', media);
+            addMediaFile(media);
+        };
+
+        const handleReceiveLink = (link: MediaFile) => {
+            console.log('[useChatSocket] Enlace recibido', link);
+            addMediaFile(link);
+        };
+
+        const handleNewMediaNotification = (data: {
+            chatId: string;
+            senderId: string;
+            mediaId: string;
+        }) => {
+            // Mostrar notificación si no estamos en ese chat
+            if (activeChat?.id !== data.chatId) {
+                // Implementar lógica de notificación
+                console.log('Nuevo archivo multimedia recibido en otro chat');
+            }
+        };
+
         socket.on('receive-message', handleReceiveMessage);
         socket.on('user-status', handleUserStatus);
         socket.on('connect', handleConnect);
@@ -120,6 +142,9 @@ export const useChatSocket = () => {
         socket.on('chat-accepted', handleChatAccepted);
         socket.on('chat-message-summary', handleChatMessageSummary);
         socket.on('new-message-notification', handleNewMessageNotification);
+        socket.on('receive-media', handleReceiveMedia);
+        socket.on('receive-link', handleReceiveLink);
+        socket.on('new-media-notification', handleNewMediaNotification);
 
         // Registrar todos los eventos para depuración
         socket.onAny((event, ...args) => {
@@ -140,7 +165,22 @@ export const useChatSocket = () => {
             socket.off('chat-accepted', handleChatAccepted);
             socket.off('chat-message-summary', handleChatMessageSummary);
             socket.off('new-message-notification', handleNewMessageNotification);
+            socket.off('receive-media', handleReceiveMedia);
+            socket.off('receive-link', handleReceiveLink);
+            socket.off('new-media-notification', handleNewMediaNotification);
             socket.offAny();
         };
-    }, [socket, addMessage, setUserOnlineStatus, logout, user, addChatRequest, loadChats, setChatRequests, setChats]);
+    }, [
+        socket,
+        addMessage,
+        setUserOnlineStatus,
+        logout,
+        user,
+        addChatRequest,
+        loadChats,
+        setChatRequests,
+        setChats,
+        activeChat,
+        addMediaFile
+    ]);
 };

@@ -21,6 +21,22 @@ export interface Message {
     nonce?: string; // Agregar si es necesario
 }
 
+export interface MediaFile {
+    id: string;
+    chatId: string;
+    senderId: string;
+    receiverId: string;
+    filename: string;
+    mimetype: string;
+    size: number;
+    url: string;
+    status: MessageStatus;
+    createdAt: Date;
+    fileType: 'image' | 'file' | 'link'; // Nuevo campo crucial
+}
+
+export type ChatItem = Message | MediaFile;
+
 export interface Chat {
     id: string;
     user1: User;

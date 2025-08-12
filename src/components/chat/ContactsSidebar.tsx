@@ -33,8 +33,6 @@ const ContactsSidebar = ({
     const [searchQuery, setSearchQuery] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
 
-    console.log("MissedCount en contentSidebar: ", missedCount)
-
     useEffect(() => {
         if (user) {
             loadChats();

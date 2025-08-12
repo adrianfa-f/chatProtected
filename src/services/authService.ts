@@ -24,7 +24,6 @@ export const registerPushNotifications = async (userId: string) => {
             if (response.status !== 200) {
                 throw new Error('Error al registrar suscripción');
             }
-            console.log('Suscripción registrada correctamente');
         } catch (error) {
             console.error('Error registrando suscripción:', error);
             // Implementar lógica de reintento

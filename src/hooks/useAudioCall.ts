@@ -33,7 +33,6 @@ export function useAudioCall() {
                 const response = await api.get('/api/calls/');
                 setCalls(response.data);
                 const responseMissedCount = await api.get('/api/calls/missed-count')
-                console.log("Response de count: ", responseMissedCount)
                 setMissedCount(responseMissedCount.data.count)
             } catch (err) {
                 console.error("Error cargando llamadas o conteo de llamdas perdidas:", err);
@@ -110,8 +109,7 @@ export function useAudioCall() {
 
     const markAsSeen = useCallback(async () => {
         try {
-            const responce = await api.put('/api/calls/mark-seen');
-            console.log("Respuesta de marcar como seen: ", responce)
+            await api.put('/api/calls/mark-seen');
         } catch (err) {
             console.log("Errora al marcar como visto las llamdas perdidas: ", err)
         }
@@ -160,7 +158,6 @@ export function useAudioCall() {
     // 1️⃣ startCall: quien inicia la llamada
     const startCall = useCallback(
         async (targetId: string) => {
-            console.log("Comenzamos la llamada con: ", targetId)
             if (!socket || !user) throw new Error('Socket no inicializado')
             peerIdRef.current = targetId
             setIsRinging(false)
@@ -231,8 +228,6 @@ export function useAudioCall() {
             peerIdRef.current = from
             setIsCalling(false)
             setInCall(true)
-            console.log("IsCalling: ", isCalling)
-            console.log("InCall: ", inCall)
 
             const pc = initPeerConnection()
             const local = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -278,20 +273,15 @@ export function useAudioCall() {
         };
 
         const handleEnd = ({ from }: { from: string }) => {
-            console.log("peerIdRef.current: ", peerIdRef.current)
-            console.log("from: ", from)
-            console.log("peerIdRef.current = from :", peerIdRef.current === from)
             if (peerIdRef.current !== from) return
             cleanupCall()
         }
 
         const handleDeclined = () => {
-            console.log("Declined call")
             cleanupCall()
         }
 
         const handleCanceled = () => {
-            console.log("Canceled call")
             cleanupCall()
         }
 
