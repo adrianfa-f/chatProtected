@@ -28,7 +28,6 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                             alt="Imagen enviada"
                             className="max-w-xs max-h-64 rounded-lg object-contain"
                         />
-                        <p className="mt-1 text-sm">{item.filename}</p>
                     </div>
                 );
 
@@ -41,6 +40,7 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                             download={item.filename}
                             className="text-blue-500 hover:text-blue-700 truncate"
                             title={item.filename}
+                            onClick={(e) => e.stopPropagation()}
                         >
                             {item.filename}
                         </a>
