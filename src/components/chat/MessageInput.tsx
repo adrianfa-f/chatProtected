@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { FaPaperPlane, FaPaperclip, FaLink, FaTimes } from 'react-icons/fa';
+import { FaPaperPlane, FaPaperclip, FaLink, FaTimes, FaVideo, FaMicrophone } from 'react-icons/fa';
 import { useSocket } from '../../contexts/SocketContext';
+import AudioRecorder from './AudioRecorder';
 
 interface MessageInputProps {
     chatId: string;
