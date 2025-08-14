@@ -28,6 +28,31 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                             alt="Imagen enviada"
                             className="max-w-xs max-h-64 rounded-lg object-contain"
                         />
+                        <p className="mt-1 text-sm">{item.filename}</p>
+                    </div>
+                );
+
+            case 'video':
+                return (
+                    <div className="mt-1">
+                        <video
+                            src={item.url}
+                            controls
+                            className="max-w-xs max-h-64 rounded-lg"
+                        />
+                        <p className="mt-1 text-sm">{item.filename}</p>
+                    </div>
+                );
+
+            case 'audio':
+                return (
+                    <div className="mt-1">
+                        <audio
+                            src={item.url}
+                            controls
+                            className="w-full"
+                        />
+                        <p className="mt-1 text-sm">{item.filename}</p>
                     </div>
                 );
 
@@ -40,7 +65,15 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                             download={item.filename}
                             className="text-blue-500 hover:text-blue-700 truncate"
                             title={item.filename}
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                const link = document.createElement('a');
+                                link.href = item.url;
+                                link.setAttribute('download', item.filename);
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            }}
                         >
                             {item.filename}
                         </a>

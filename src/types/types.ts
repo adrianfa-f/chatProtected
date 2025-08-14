@@ -32,7 +32,7 @@ export interface MediaFile {
     url: string;
     status: MessageStatus;
     createdAt: Date;
-    fileType: 'image' | 'file' | 'link'; // Nuevo campo crucial
+    fileType: 'image' | 'file' | 'link' | 'video' | 'audio'; // Nuevo campo crucial
 }
 
 export type ChatItem = Message | MediaFile;
