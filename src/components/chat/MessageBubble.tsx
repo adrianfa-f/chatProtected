@@ -15,8 +15,7 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
 
     const renderContent = () => {
         if (!isMedia) {
-            // Es un mensaje de texto normal
-            return <p>{item.plaintext || item.ciphertext}</p>;
+            return <p className="break-words">{item.plaintext || item.ciphertext}</p>;
         }
 
         switch (item.fileType) {
@@ -26,9 +25,17 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                         <img
                             src={item.url}
                             alt="Imagen enviada"
-                            className="max-w-xs max-h-64 rounded-lg object-contain"
+                            className="max-w-full max-h-64 rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => {
+                                // Abrir imagen en modal o ventana nueva
+                                window.open(item.url, '_blank');
+                            }}
                         />
-                        <p className="mt-1 text-sm">{item.filename}</p>
+                        {item.filename && (
+                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 break-words">
+                                {item.filename}
+                            </p>
+                        )}
                     </div>
                 );
 
@@ -38,9 +45,13 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                         <video
                             src={item.url}
                             controls
-                            className="max-w-xs max-h-64 rounded-lg"
+                            className="max-w-full max-h-64 rounded-lg"
                         />
-                        <p className="mt-1 text-sm">{item.filename}</p>
+                        {item.filename && (
+                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                {item.filename}
+                            </p>
+                        )}
                     </div>
                 );
 
@@ -52,18 +63,22 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                             controls
                             className="w-full"
                         />
-                        <p className="mt-1 text-sm">{item.filename}</p>
+                        {item.filename && (
+                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                {item.filename}
+                            </p>
+                        )}
                     </div>
                 );
 
             case 'file':
                 return (
-                    <div className="flex items-center p-2 bg-white bg-opacity-20 rounded-lg">
-                        <FaPaperclip className="mr-2 flex-shrink-0" />
+                    <div className="flex items-center p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <FaPaperclip className="mr-2 flex-shrink-0 text-gray-600 dark:text-gray-300" />
                         <a
                             href={item.url}
                             download={item.filename}
-                            className="text-blue-500 hover:text-blue-700 truncate"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 truncate break-all"
                             title={item.filename}
                             onClick={(e) => {
                                 e.preventDefault();
@@ -82,12 +97,12 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
 
             case 'link':
                 return (
-                    <div className="mt-1 p-2 bg-blue-50 rounded-lg">
+                    <div className="mt-1 p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
                         <a
                             href={item.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-500 hover:text-blue-700 flex items-center"
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center break-all"
                         >
                             {item.url}
                             <FaExternalLinkAlt className="ml-1 text-xs" />
@@ -96,7 +111,7 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
                 );
 
             default:
-                return <p>{item.filename || 'Contenido multimedia'}</p>;
+                return <p className="text-gray-600 dark:text-gray-400">{item.filename || 'Contenido multimedia'}</p>;
         }
     };
 
@@ -105,17 +120,17 @@ const MessageBubble = ({ item, isOwn }: MessageBubbleProps) => {
             <div
                 className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${isOwn
                     ? 'bg-purple-600 text-white rounded-br-none ml-12'
-                    : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none mr-12'
+                    : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white border border-gray-200 dark:border-gray-600 rounded-bl-none mr-12'
                     }`}
             >
                 {renderContent()}
 
-                <div className={`flex items-center justify-end mt-1 text-xs ${isOwn ? 'text-purple-200' : 'text-gray-500'}`}>
+                <div className={`flex items-center justify-end mt-1 text-xs ${isOwn ? 'text-purple-200' : 'text-gray-500 dark:text-gray-400'}`}>
                     <span className="mr-1">{messageTime}</span>
                     {isOwn && 'status' in item && (
                         item.status === 'seen'
-                            ? <FaCheckDouble className="text-gray-300" />
-                            : <FaCheck className="text-gray-300" />
+                            ? <FaCheckDouble className="text-gray-300 dark:text-gray-500" />
+                            : <FaCheck className="text-gray-300 dark:text-gray-500" />
                     )}
                 </div>
             </div>

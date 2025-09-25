@@ -27,9 +27,9 @@ const RegisterForm = () => {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="text-red-500 text-sm">{error}</div>}
+            {error && <div className="text-red-500 text-sm bg-red-50 dark:bg-red-900/20 p-2 rounded">{error}</div>}
             <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Nombre de Usuario
                 </label>
                 <input
@@ -37,12 +37,12 @@ const RegisterForm = () => {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 text-gray-900 rounded-md shadow-sm p-2"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md shadow-sm p-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                 />
             </div>
             <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Contraseña
                 </label>
                 <input
@@ -51,12 +51,12 @@ const RegisterForm = () => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 text-gray-900 rounded-md shadow-sm p-2"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md shadow-sm p-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                 />
             </div>
             <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Confirmar Contraseña
                 </label>
                 <input
@@ -64,13 +64,13 @@ const RegisterForm = () => {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 text-gray-900 rounded-md shadow-sm p-2"
+                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md shadow-sm p-2 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                 />
             </div>
             <button
                 type="submit"
-                className="w-full bg-gray-700 text-white py-2 px-4 rounded-md hover:bg-purple-600"
+                className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
             >
                 Registrarse
             </button>
